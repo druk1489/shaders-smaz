@@ -6,9 +6,10 @@
 --
 -- Загружает по очереди:
 --   1. atmosphere_v9.lua (солнце, луна, молнии, погода, шейдеры)
---   2. tornado_v10.lua   (мульти-торнадо, Rankine vortex, merge/split)
+--   2. tornado_v10.lua   (мульти-торнадо, Rankine, merge/split)
+--   3. rain_v11.lua      (дождь 3D + капли на экране, raycast крыши)
 --
--- Каждый скрипт запускается в pcall — падение одного не убивает другой.
+-- Каждый скрипт запускается в pcall.
 --==============================================================
 
 local REPO = "druk1489/shaders-smaz"
@@ -17,6 +18,7 @@ local BRANCH = "main"
 local MODULES = {
 	{name = "Atmosphere v9", file = "atmosphere_v9.lua"},
 	{name = "Tornado v10",   file = "tornado_v10.lua"},
+	{name = "Rain v11",      file = "rain_v11.lua"},
 }
 
 local StarterGui = game:GetService("StarterGui")
