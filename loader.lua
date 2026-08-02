@@ -1,29 +1,22 @@
 --==============================================================
--- ATMOSPHERE / SHADERS v9 — LOADER
+-- SHADERS-SMAZ LOADER
 --
--- Запуск одной строкой в executor'е:
+-- Одна строка запуска в executor'е:
 --   loadstring(game:HttpGet("https://raw.githubusercontent.com/druk1489/shaders-smaz/main/loader.lua"))()
 --
--- Что делает:
---   1. Скачивает atmosphere_v9.lua из гита (всегда свежая версия)
---   2. Компилит в функцию через loadstring
---   3. Запускает
---   4. Ловит любые ошибки и пишет в warn/notification
+-- Загружает по очереди:
+--   1. atmosphere_v9.lua (солнце, луна, молнии, погода, шейдеры)
+--   2. tornado_v10.lua   (мульти-торнадо, Rankine vortex, merge/split)
+--
+-- Каждый скрипт запускается в pcall — падение одного не убивает другой.
 --==============================================================
 
-local REPO   = "druk1489/shaders-smaz"
+local REPO = "druk1489/shaders-smaz"
 local BRANCH = "main"
-local FILE   = "atmosphere_v9.lua"
-local LABEL  = "Atmosphere v9"
 
--- главный URL + зеркало на случай если raw.githubusercontent.com заблокирован
--- (многие executor'ы проксируют через свой CDN, но HttpGet обычно работает напрямую)
-local URLS = {
-	("https://raw.githubusercontent.com/%s/%s/%s"):format(REPO, BRANCH, FILE),
-	-- cache-бастер на случай CDN-кэша:
-	("https://raw.githubusercontent.com/%s/%s/%s?cb=%d"):format(REPO, BRANCH, FILE, tick()),
-	-- альтернатива (github-зеркало cdn.jsdelivr.net):
-	("https://cdn.jsdelivr.net/gh/%s@%s/%s"):format(REPO, BRANCH, FILE),
+local MODULES = {
+	{name = "Atmosphere v9", file = "atmosphere_v9.lua"},
+	{name = "Tornado v10",   file = "tornado_v10.lua"},
 }
 
 local StarterGui = game:GetService("StarterGui")
@@ -33,46 +26,51 @@ local function notify(title, text, dur)
 	end)
 end
 
-notify(LABEL, "Загружаю скрипт…", 3)
+local function urlsFor(file)
+	return {
+		("https://raw.githubusercontent.com/%s/%s/%s"):format(REPO, BRANCH, file),
+		("https://raw.githubusercontent.com/%s/%s/%s?cb=%d"):format(REPO, BRANCH, file, tick()),
+		("https://cdn.jsdelivr.net/gh/%s@%s/%s"):format(REPO, BRANCH, file),
+	}
+end
 
--- Пробуем каждый URL по очереди
-local src, lastErr
-for i, url in ipairs(URLS) do
-	local ok, res = pcall(function()
-		return game:HttpGet(url, true)
-	end)
-	if ok and type(res) == "string" and #res > 200 then
-		src = res
-		break
-	else
+local function fetch(urls, label)
+	local lastErr
+	for i, url in ipairs(urls) do
+		local ok, res = pcall(function() return game:HttpGet(url, true) end)
+		if ok and type(res) == "string" and #res > 200 then
+			return res
+		end
 		lastErr = tostring(res)
-		warn(("[%s loader] URL #%d failed: %s"):format(LABEL, i, lastErr))
+		warn(("[%s loader] URL #%d failed: %s"):format(label, i, lastErr))
 	end
+	return nil, lastErr
 end
 
-if not src then
-	local msg = "Не смог скачать скрипт: " .. tostring(lastErr)
-	warn("[" .. LABEL .. " loader] " .. msg)
-	notify(LABEL .. " ERROR", msg, 8)
-	return
+local function run(mod)
+	notify(mod.name, "Загружаю…", 3)
+	local src, err = fetch(urlsFor(mod.file), mod.name)
+	if not src then
+		notify(mod.name .. " ERROR", "Не скачал: " .. tostring(err), 8)
+		return false
+	end
+	local fn, ce = loadstring(src, "=" .. mod.file)
+	if not fn then
+		notify(mod.name .. " ERROR", "loadstring: " .. tostring(ce), 8)
+		return false
+	end
+	local ok, re = pcall(fn)
+	if not ok then
+		notify(mod.name .. " ERROR", "runtime: " .. tostring(re), 8)
+		return false
+	end
+	return true
 end
 
--- Компилим скрипт
-local fn, compileErr = loadstring(src, "=" .. FILE)
-if not fn then
-	local msg = "loadstring failed: " .. tostring(compileErr)
-	warn("[" .. LABEL .. " loader] " .. msg)
-	notify(LABEL .. " ERROR", msg, 8)
-	return
+local loadedCount = 0
+for _, mod in ipairs(MODULES) do
+	if run(mod) then loadedCount = loadedCount + 1 end
 end
 
--- Запускаем в защищённом pcall'е
-local runOk, runErr = pcall(fn)
-if not runOk then
-	local msg = "runtime error: " .. tostring(runErr)
-	warn("[" .. LABEL .. " loader] " .. msg)
-	notify(LABEL .. " ERROR", msg, 8)
-	return
-end
-
-notify(LABEL, "Готово! Shift+P = фрикам, X = скрыть, RightShift = панель", 5)
+notify("Shaders-Smaz", ("Готово: %d/%d модулей"):format(loadedCount, #MODULES), 5)
+print(("[Shaders-Smaz] %d/%d модулей загружено"):format(loadedCount, #MODULES))
