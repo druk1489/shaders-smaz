@@ -1,78 +1,65 @@
---==============================================================
--- SHADERS-SMAZ LOADER
---
--- Одна строка запуска в executor'е:
---   loadstring(game:HttpGet("https://raw.githubusercontent.com/druk1489/shaders-smaz/main/loader.lua"))()
---
--- Загружает по очереди:
---   1. atmosphere_v9.lua (солнце, луна, молнии, погода, шейдеры)
---   2. tornado_v10.lua   (мульти-торнадо, Rankine, merge/split)
---   3. rain_v11.lua      (дождь 3D + капли на экране, raycast крыши)
---
--- Каждый скрипт запускается в pcall.
---==============================================================
+-- Loader v3 - loads atmosphere_v9, tornado_v12, rain_v12, lightning_v12
+-- Usage: loadstring(game:HttpGet("https://raw.githubusercontent.com/druk1489/shaders-smaz/main/loader.lua"))()
 
-local REPO = "druk1489/shaders-smaz"
+local HttpService = game:GetService("HttpService")
+local StarterGui = game:GetService("StarterGui")
+
+local REPO_USER = "druk1489"
+local REPO_NAME = "shaders-smaz"
 local BRANCH = "main"
 
 local MODULES = {
 	{name = "Atmosphere v9", file = "atmosphere_v9.lua"},
-	{name = "Tornado v10",   file = "tornado_v10.lua"},
-	{name = "Rain v11",      file = "rain_v11.lua"},
+	{name = "Tornado v12", file = "tornado_v10.lua"},
+	{name = "Rain v12", file = "rain_v11.lua"},
+	{name = "Lightning v12", file = "lightning_v12.lua"},
 }
 
-local StarterGui = game:GetService("StarterGui")
 local function notify(title, text, dur)
-	pcall(function()
-		StarterGui:SetCore("SendNotification", {Title = title, Text = text, Duration = dur or 4})
-	end)
+	pcall(function() StarterGui:SetCore("SendNotification", {Title = title, Text = text, Duration = dur or 3}) end)
 end
 
-local function urlsFor(file)
-	return {
-		("https://raw.githubusercontent.com/%s/%s/%s"):format(REPO, BRANCH, file),
-		("https://raw.githubusercontent.com/%s/%s/%s?cb=%d"):format(REPO, BRANCH, file, tick()),
-		("https://cdn.jsdelivr.net/gh/%s@%s/%s"):format(REPO, BRANCH, file),
+local function fetch(file)
+	local urls = {
+		"https://raw.githubusercontent.com/" .. REPO_USER .. "/" .. REPO_NAME .. "/" .. BRANCH .. "/" .. file,
+		"https://raw.githubusercontent.com/" .. REPO_USER .. "/" .. REPO_NAME .. "/" .. BRANCH .. "/" .. file .. "?t=" .. tostring(tick()),
+		"https://cdn.jsdelivr.net/gh/" .. REPO_USER .. "/" .. REPO_NAME .. "@" .. BRANCH .. "/" .. file,
 	}
-end
-
-local function fetch(urls, label)
-	local lastErr
 	for i, url in ipairs(urls) do
-		local ok, res = pcall(function() return game:HttpGet(url, true) end)
-		if ok and type(res) == "string" and #res > 200 then
-			return res
-		end
-		lastErr = tostring(res)
-		warn(("[%s loader] URL #%d failed: %s"):format(label, i, lastErr))
+		local ok, src = pcall(function() return game:HttpGet(url, true) end)
+		if ok and src and #src > 100 then return src, url end
 	end
-	return nil, lastErr
+	return nil
 end
 
-local function run(mod)
-	notify(mod.name, "Загружаю…", 3)
-	local src, err = fetch(urlsFor(mod.file), mod.name)
-	if not src then
-		notify(mod.name .. " ERROR", "Не скачал: " .. tostring(err), 8)
-		return false
-	end
-	local fn, ce = loadstring(src, "=" .. mod.file)
-	if not fn then
-		notify(mod.name .. " ERROR", "loadstring: " .. tostring(ce), 8)
-		return false
-	end
-	local ok, re = pcall(fn)
-	if not ok then
-		notify(mod.name .. " ERROR", "runtime: " .. tostring(re), 8)
-		return false
-	end
-	return true
-end
+notify("Loader v3", "Loading " .. #MODULES .. " modules...", 3)
+print("[Loader v3] Starting sequential module load")
 
-local loadedCount = 0
+local loaded = 0
 for _, mod in ipairs(MODULES) do
-	if run(mod) then loadedCount = loadedCount + 1 end
+	print("[Loader v3] fetching " .. mod.file)
+	local src, url = fetch(mod.file)
+	if not src then
+		warn("[Loader v3] FAIL fetch: " .. mod.file)
+		notify("Loader v3", mod.name .. ": fetch failed", 4)
+	else
+		local fn, err = loadstring(src, mod.name)
+		if not fn then
+			warn("[Loader v3] FAIL compile " .. mod.name .. ": " .. tostring(err))
+			notify("Loader v3", mod.name .. ": compile fail", 4)
+		else
+			local ok, runErr = pcall(fn)
+			if not ok then
+				warn("[Loader v3] FAIL run " .. mod.name .. ": " .. tostring(runErr))
+				notify("Loader v3", mod.name .. ": runtime error", 4)
+			else
+				print("[Loader v3] OK " .. mod.name)
+				loaded = loaded + 1
+			end
+		end
+	end
+	task.wait(0.15)
 end
 
-notify("Shaders-Smaz", ("Готово: %d/%d модулей"):format(loadedCount, #MODULES), 5)
-print(("[Shaders-Smaz] %d/%d модулей загружено"):format(loadedCount, #MODULES))
+notify("Loader v3", "Loaded " .. loaded .. "/" .. #MODULES .. " modules", 5)
+print("[Loader v3] Done: " .. loaded .. "/" .. #MODULES)
