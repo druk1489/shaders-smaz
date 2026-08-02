@@ -1,4 +1,4 @@
--- Tornado v12 (overwrites v10) - PARTICLE-BASED. No cylinder models.
+-- Tornado v13 - no hotkeys, no own GUI, autoSpawn=false default, SMAZ_TORNADO API
 
 if getgenv and getgenv().__TORNADO_V10_LOADED then
 	if getgenv().__TORNADO_V10_UNLOAD then pcall(getgenv().__TORNADO_V10_UNLOAD) end
@@ -7,9 +7,7 @@ if getgenv then getgenv().__TORNADO_V10_LOADED = true end
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local UIS = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
-local StarterGui = game:GetService("StarterGui")
 
 local player = Players.LocalPlayer
 
@@ -17,12 +15,10 @@ local TEX = {
 	Particle = "rbxassetid://3318493519",
 	Texture = "rbxassetid://4620269460",
 	WeatherCld = "rbxassetid://5398996805",
-	CloudNoise = "rbxassetid://41686044",
-	BlackClouds = "rbxassetid://1578526427",
 }
 
 local CFG = {
-	maxConcurrent = 3, autoSpawn = true,
+	maxConcurrent = 3, autoSpawn = false,   -- DEFAULT OFF
 	spawnInterval = 12, spawnChance = 0.6,
 	spawnMinDist = 200, spawnMaxDist = 700,
 	minSeparation = 120, mergeDist = 60, splitChance = 0.0015,
@@ -101,17 +97,11 @@ function Tornado:build()
 			local anchor = makeAnchor(); anchor.Name = "r"..r.."_e"..e; anchor.Parent = self.folder
 			local att = Instance.new("Attachment"); att.Parent = anchor
 			local pe = Instance.new("ParticleEmitter")
-			pe.Texture = TEX.Particle
-			pe.Rate = CFG.particleRate
+			pe.Texture = TEX.Particle; pe.Rate = CFG.particleRate
 			pe.Lifetime = NumberRange.new(CFG.particleLife[1], CFG.particleLife[2])
-			pe.Speed = NumberRange.new(0, 0)
-			pe.SpreadAngle = Vector2.new(0, 0)
-			pe.Rotation = NumberRange.new(0, 360)
-			pe.RotSpeed = NumberRange.new(-90, 90)
-			pe.Size = NumberSequence.new({
-				NumberSequenceKeypoint.new(0, 8),
-				NumberSequenceKeypoint.new(1, 12),
-			})
+			pe.Speed = NumberRange.new(0, 0); pe.SpreadAngle = Vector2.new(0, 0)
+			pe.Rotation = NumberRange.new(0, 360); pe.RotSpeed = NumberRange.new(-90, 90)
+			pe.Size = NumberSequence.new({NumberSequenceKeypoint.new(0, 8), NumberSequenceKeypoint.new(1, 12)})
 			pe.Transparency = NumberSequence.new({
 				NumberSequenceKeypoint.new(0, 1),
 				NumberSequenceKeypoint.new(0.15, 0.35),
@@ -119,31 +109,20 @@ function Tornado:build()
 				NumberSequenceKeypoint.new(1, 1),
 			})
 			pe.Color = ColorSequence.new(Color3.fromRGB(155, 152, 165))
-			pe.LightEmission = 0.05
-			pe.LightInfluence = 0.7
-			pe.LockedToPart = false
-			pe.Parent = att
+			pe.LightEmission = 0.05; pe.LightInfluence = 0.7; pe.LockedToPart = false; pe.Parent = att
 			local pe2 = Instance.new("ParticleEmitter")
-			pe2.Texture = TEX.Texture
-			pe2.Rate = CFG.particleRate * 0.5
+			pe2.Texture = TEX.Texture; pe2.Rate = CFG.particleRate * 0.5
 			pe2.Lifetime = NumberRange.new(CFG.particleLife[1]*1.5, CFG.particleLife[2]*1.5)
-			pe2.Speed = NumberRange.new(0, 0)
-			pe2.SpreadAngle = Vector2.new(0, 0)
-			pe2.Rotation = NumberRange.new(0, 360)
-			pe2.RotSpeed = NumberRange.new(-180, 180)
-			pe2.Size = NumberSequence.new({
-				NumberSequenceKeypoint.new(0, 6),
-				NumberSequenceKeypoint.new(1, 14),
-			})
+			pe2.Speed = NumberRange.new(0, 0); pe2.SpreadAngle = Vector2.new(0, 0)
+			pe2.Rotation = NumberRange.new(0, 360); pe2.RotSpeed = NumberRange.new(-180, 180)
+			pe2.Size = NumberSequence.new({NumberSequenceKeypoint.new(0, 6), NumberSequenceKeypoint.new(1, 14)})
 			pe2.Transparency = NumberSequence.new({
 				NumberSequenceKeypoint.new(0, 1),
 				NumberSequenceKeypoint.new(0.2, 0.5),
 				NumberSequenceKeypoint.new(1, 1),
 			})
 			pe2.Color = ColorSequence.new(Color3.fromRGB(175, 173, 185))
-			pe2.LightEmission = 0.1
-			pe2.LockedToPart = false
-			pe2.Parent = att
+			pe2.LightEmission = 0.1; pe2.LockedToPart = false; pe2.Parent = att
 			table.insert(ring.emitters, {
 				anchor = anchor, att = att, pe = pe, pe2 = pe2,
 				phaseOff = (e - 1) / CFG.emittersPerRing * math.pi * 2 + rng:NextNumber() * 0.3,
@@ -156,43 +135,29 @@ function Tornado:build()
 	local dust = Instance.new("ParticleEmitter")
 	dust.Texture = TEX.Particle
 	dust.Rate = CFG.debrisRate * (0.5 + self.ef * 0.2)
-	dust.Lifetime = NumberRange.new(1.5, 3)
-	dust.Speed = NumberRange.new(20, 45)
-	dust.SpreadAngle = Vector2.new(180, 180)
-	dust.Rotation = NumberRange.new(0, 360)
+	dust.Lifetime = NumberRange.new(1.5, 3); dust.Speed = NumberRange.new(20, 45)
+	dust.SpreadAngle = Vector2.new(180, 180); dust.Rotation = NumberRange.new(0, 360)
 	dust.RotSpeed = NumberRange.new(-360, 360)
-	dust.Size = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 4),
-		NumberSequenceKeypoint.new(1, 20),
-	})
-	dust.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.3),
-		NumberSequenceKeypoint.new(1, 1),
-	})
+	dust.Size = NumberSequence.new({NumberSequenceKeypoint.new(0, 4), NumberSequenceKeypoint.new(1, 20)})
+	dust.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.3), NumberSequenceKeypoint.new(1, 1)})
 	dust.Color = ColorSequence.new(Color3.fromRGB(120, 115, 125))
-	dust.Acceleration = Vector3.new(0, -5, 0)
-	dust.LockedToPart = false
-	dust.Parent = baseAtt
+	dust.Acceleration = Vector3.new(0, -5, 0); dust.LockedToPart = false; dust.Parent = baseAtt
 	self.dustEmitter = dust
 	self.cloudAnchor = makeAnchor(); self.cloudAnchor.Name = "cloud"; self.cloudAnchor.Parent = self.folder
 	local cloudAtt = Instance.new("Attachment"); cloudAtt.Parent = self.cloudAnchor
 	local cloud = Instance.new("ParticleEmitter")
-	cloud.Texture = TEX.WeatherCld
-	cloud.Rate = 28; cloud.Lifetime = NumberRange.new(3, 5)
-	cloud.Speed = NumberRange.new(0, 0); cloud.SpreadAngle = Vector2.new(0, 0)
-	cloud.Rotation = NumberRange.new(0, 360); cloud.RotSpeed = NumberRange.new(-30, 30)
-	cloud.Size = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 50),
-		NumberSequenceKeypoint.new(1, 85),
-	})
+	cloud.Texture = TEX.WeatherCld; cloud.Rate = 28
+	cloud.Lifetime = NumberRange.new(3, 5); cloud.Speed = NumberRange.new(0, 0)
+	cloud.SpreadAngle = Vector2.new(0, 0); cloud.Rotation = NumberRange.new(0, 360)
+	cloud.RotSpeed = NumberRange.new(-30, 30)
+	cloud.Size = NumberSequence.new({NumberSequenceKeypoint.new(0, 50), NumberSequenceKeypoint.new(1, 85)})
 	cloud.Transparency = NumberSequence.new({
 		NumberSequenceKeypoint.new(0, 1),
 		NumberSequenceKeypoint.new(0.3, 0.4),
 		NumberSequenceKeypoint.new(1, 1),
 	})
 	cloud.Color = ColorSequence.new(Color3.fromRGB(60, 58, 72))
-	cloud.LockedToPart = false
-	cloud.Parent = cloudAtt
+	cloud.LockedToPart = false; cloud.Parent = cloudAtt
 	self.cloudEmitter = cloud
 end
 
@@ -212,8 +177,7 @@ end
 
 function Tornado:update(dt)
 	if self.state == "dead" then return end
-	self.age = self.age + dt
-	self.stateTimer = self.stateTimer + dt
+	self.age = self.age + dt; self.stateTimer = self.stateTimer + dt
 	if self.state == "forming" and self.stateTimer >= CFG.formingTime then
 		self.state = "mature"; self.stateTimer = 0
 	elseif self.state == "mature" and self.stateTimer >= self.matureDuration then
@@ -227,15 +191,13 @@ function Tornado:update(dt)
 	local target = Vector3.new(self.moveDir.X + dx * 0.4, 0, self.moveDir.Z + dz * 0.4)
 	if target.Magnitude > 0.01 then self.moveDir = target.Unit end
 	self.pos = self.pos + self.moveDir * self.moveSpeed * dt
-	local scale = self:radiusScale()
-	local reach = self:reach()
+	local scale = self:radiusScale(); local reach = self:reach()
 	local activeR = self.baseR * scale * (1 + math.sin(self.age * 3) * 0.06)
 	if self.state == "dying" then
 		activeR = activeR * math.max(0.25, 1 - self.stateTimer / CFG.dyingTime * 0.7)
 	end
 	local groundY = groundYAt(self.pos.X, self.pos.Z)
-	local topY = groundY + self.baseH
-	local bottomY = topY - self.baseH * reach
+	local topY = groundY + self.baseH; local bottomY = topY - self.baseH * reach
 	for _, ring in ipairs(self.rings) do
 		local ti = ring.ti
 		local y = lerp(bottomY, topY, ti)
@@ -243,16 +205,14 @@ function Tornado:update(dt)
 		local wobAmp = self.state == "dying" and (4 * ti * (self.stateTimer / CFG.dyingTime)) or (0.8 * ti)
 		local wobX = math.sin(self.age * 2.5 + ti * 6) * wobAmp
 		local wobZ = math.cos(self.age * 2.5 + ti * 6) * wobAmp
-		local ringCX = self.pos.X + wobX
-		local ringCZ = self.pos.Z + wobZ
+		local ringCX = self.pos.X + wobX; local ringCZ = self.pos.Z + wobZ
 		for _, em in ipairs(ring.emitters) do
 			local phase = em.phaseOff + self.age * self.omega * (0.7 + ti * 0.5)
 			local ax = ringCX + math.cos(phase) * rHere
 			local az = ringCZ + math.sin(phase) * rHere
 			em.anchor.CFrame = CFrame.new(ax, y, az)
 			local enabled = reach > 0.1
-			em.pe.Enabled = enabled
-			em.pe2.Enabled = enabled
+			em.pe.Enabled = enabled; em.pe2.Enabled = enabled
 		end
 	end
 	self.baseAnchor.CFrame = CFrame.new(self.pos.X, groundY + 1, self.pos.Z)
@@ -305,6 +265,7 @@ function Manager:spawnRandom()
 end
 
 function Manager:spawnNear()
+	if self:count() >= CFG.maxConcurrent then return end
 	local pp = playerPos()
 	local ang = rng:NextNumber() * math.pi * 2
 	local d = urand(80, 160)
@@ -344,27 +305,9 @@ function Manager:checkMerges()
 	end
 end
 
-function Manager:checkSplits(dt)
-	if self:count() >= CFG.maxConcurrent then return end
-	for _, t in ipairs(self:snapshot()) do
-		if t.state == "mature" and t.ef >= 3 and (t.matureDuration - t.stateTimer) > 20 then
-			if rng:NextNumber() < CFG.splitChance * dt * 60 then
-				local ang = rng:NextNumber() * math.pi * 2
-				local d = urand(45, 90)
-				local np = Vector3.new(t.pos.X + math.cos(ang)*d, 0, t.pos.Z + math.sin(ang)*d)
-				if not self:tooClose(np) and self:count() < CFG.maxConcurrent then
-					local child = Tornado.new(np, math.max(0, t.ef - 2))
-					child.baseR = t.baseR * 0.55
-					child.baseH = t.baseH * 0.8
-				end
-			end
-		end
-	end
-end
-
 function Manager:step(dt)
 	for _, t in ipairs(self:snapshot()) do pcall(t.update, t, dt) end
-	self:checkMerges(); self:checkSplits(dt)
+	self:checkMerges()
 	if CFG.autoSpawn then
 		self.spawnAccum = self.spawnAccum + dt
 		if self.spawnAccum >= CFG.spawnInterval then
@@ -374,87 +317,31 @@ function Manager:step(dt)
 	end
 end
 
-local pgui = player:FindFirstChildOfClass("PlayerGui") or player:WaitForChild("PlayerGui", 5)
-local gui
-local function buildGui()
-	if not pgui then return end
-	if gui then gui:Destroy() end
-	gui = Instance.new("ScreenGui")
-	gui.Name = "TornadoV10GUI"
-	gui.ResetOnSpawn = false; gui.DisplayOrder = 90; gui.Parent = pgui
-	local frame = Instance.new("Frame")
-	frame.Size = UDim2.new(0, 230, 0, 200)
-	frame.Position = UDim2.new(1, -250, 1, -220)
-	frame.BackgroundColor3 = Color3.fromRGB(18, 18, 26)
-	frame.BackgroundTransparency = 0.1
-	frame.BorderSizePixel = 0
-	frame.Parent = gui
-	Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
-	local title = Instance.new("TextLabel")
-	title.Size = UDim2.new(1, 0, 0, 24); title.BackgroundTransparency = 1
-	title.Text = "TORNADO v12 (particle)"
-	title.TextColor3 = Color3.fromRGB(230, 230, 245)
-	title.Font = Enum.Font.GothamBold; title.TextSize = 13; title.Parent = frame
-	local info = Instance.new("TextLabel")
-	info.Size = UDim2.new(1, -10, 0, 40); info.Position = UDim2.new(0, 5, 0, 24)
-	info.BackgroundTransparency = 1
-	info.TextXAlignment = Enum.TextXAlignment.Left; info.TextYAlignment = Enum.TextYAlignment.Top
-	info.TextColor3 = Color3.fromRGB(170, 170, 195)
-	info.Font = Enum.Font.Gotham; info.TextSize = 11; info.Parent = frame
-	local function mk(lbl, y, cb)
-		local b = Instance.new("TextButton")
-		b.Size = UDim2.new(1, -10, 0, 24); b.Position = UDim2.new(0, 5, 0, y)
-		b.BackgroundColor3 = Color3.fromRGB(55, 55, 78); b.TextColor3 = Color3.fromRGB(230, 230, 250)
-		b.Font = Enum.Font.Gotham; b.TextSize = 12; b.Text = lbl; b.BorderSizePixel = 0; b.Parent = frame
-		Instance.new("UICorner", b).CornerRadius = UDim.new(0, 4)
-		b.MouseButton1Click:Connect(cb); return b
-	end
-	local y = 68
-	mk("Spawn near [T]", y, function() Manager:spawnNear() end); y = y + 27
-	local ab = mk("Auto: ON [Shift+T]", y, function() CFG.autoSpawn = not CFG.autoSpawn end); y = y + 27
-	mk("Kill all [Ctrl+T]", y, function() Manager:killAll() end); y = y + 27
-	local ef = mk("EF: 2 [click]", y, function() CFG.strengthEF = (CFG.strengthEF + 1) % 6 end); y = y + 27
-	task.spawn(function()
-		while gui and gui.Parent do
-			info.Text = string.format("Active: %d/%d\nEF: %d | Auto: %s", Manager:count(), CFG.maxConcurrent, CFG.strengthEF, CFG.autoSpawn and "ON" or "OFF")
-			ab.Text = "Auto: " .. (CFG.autoSpawn and "ON" or "OFF") .. " [Shift+T]"
-			ef.Text = "EF: " .. CFG.strengthEF .. " [click]"
-			task.wait(0.4)
-		end
-	end)
-end
-pcall(buildGui)
-
-local inputConn = UIS.InputBegan:Connect(function(input, gp)
-	if gp then return end
-	if input.KeyCode == Enum.KeyCode.T then
-		local sh = UIS:IsKeyDown(Enum.KeyCode.LeftShift) or UIS:IsKeyDown(Enum.KeyCode.RightShift)
-		local ct = UIS:IsKeyDown(Enum.KeyCode.LeftControl) or UIS:IsKeyDown(Enum.KeyCode.RightControl)
-		local al = UIS:IsKeyDown(Enum.KeyCode.LeftAlt) or UIS:IsKeyDown(Enum.KeyCode.RightAlt)
-		if ct then Manager:killAll()
-		elseif sh then CFG.autoSpawn = not CFG.autoSpawn
-		elseif al then if gui then gui.Enabled = not gui.Enabled end
-		else Manager:spawnNear() end
-	end
-end)
-
 local hbConn = RunService.Heartbeat:Connect(function(dt)
 	if dt > 0.1 then dt = 0.1 end
 	pcall(Manager.step, Manager, dt)
 end)
 
-local charConn = player.CharacterAdded:Connect(function() task.wait(1); pcall(buildGui) end)
-
 if getgenv then
+	getgenv().SMAZ_TORNADO = {
+		CFG = CFG,
+		spawnNear = function() return Manager:spawnNear() end,
+		spawnRandom = function() return Manager:spawnRandom() end,
+		killAll = function() Manager:killAll() end,
+		setAutoSpawn = function(v) CFG.autoSpawn = v end,
+		isAutoSpawn = function() return CFG.autoSpawn end,
+		setEF = function(v) CFG.strengthEF = clamp(v, 0, 5) end,
+		getEF = function() return CFG.strengthEF end,
+		count = function() return Manager:count() end,
+		max = function() return CFG.maxConcurrent end,
+	}
 	getgenv().__TORNADO_V10_UNLOAD = function()
-		hbConn:Disconnect(); inputConn:Disconnect(); charConn:Disconnect()
+		hbConn:Disconnect()
 		Manager:killAll()
-		if gui then gui:Destroy() end
 		if root then root:Destroy() end
-		getgenv().__TORNADO_V10_LOADED = nil
-		getgenv().__TORNADO_V10_UNLOAD = nil
+		getgenv().__TORNADO_V10_LOADED = nil; getgenv().__TORNADO_V10_UNLOAD = nil
+		getgenv().SMAZ_TORNADO = nil
 	end
 end
 
-pcall(function() StarterGui:SetCore("SendNotification", {Title="Tornado v12", Text="Particle-based. T=spawn, Shift+T=auto, Ctrl+T=kill", Duration=5}) end)
-print("[Tornado v12] particle-based (" .. CFG.ringsPerTornado .. " rings x " .. CFG.emittersPerRing .. " emitters)")
+print("[Tornado v13] Loaded (autoSpawn OFF), API: getgenv().SMAZ_TORNADO")
