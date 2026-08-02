@@ -1,4 +1,4 @@
--- Loader v4 - kills failing sound spam, loads modules + unified control panel
+-- Loader v5 - kills failing sound spam, loads modules + control panel with reflections
 -- One-liner: loadstring(game:HttpGet("https://raw.githubusercontent.com/druk1489/shaders-smaz/main/loader.lua"))()
 
 local StarterGui = game:GetService("StarterGui")
@@ -7,8 +7,6 @@ local REPO_USER = "druk1489"
 local REPO_NAME = "shaders-smaz"
 local BRANCH = "main"
 
--- IDs of broken sound assets that spam "Failed to load sound" errors.
--- Add more here if new ones appear.
 local BLOCKED_SOUND_IDS = { "1839825074" }
 
 local function isBlocked(id)
@@ -19,11 +17,10 @@ local function isBlocked(id)
 	return false
 end
 
--- Kill sounds spawning with blocked IDs (past + future).
 local function scrub()
 	for _, obj in ipairs(game:GetDescendants()) do
 		if obj:IsA("Sound") and isBlocked(obj.SoundId) then
-			obj:Stop(); obj:Destroy()
+			pcall(function() obj:Stop(); obj:Destroy() end)
 		end
 	end
 end
@@ -44,6 +41,7 @@ local MODULES = {
 	{name = "Tornado v13", file = "tornado_v10.lua"},
 	{name = "Rain v13", file = "rain_v11.lua"},
 	{name = "Lightning v13", file = "lightning_v12.lua"},
+	{name = "Reflections v1", file = "reflections_v1.lua"},
 	{name = "Control Panel", file = "control_panel.lua"},
 }
 
@@ -64,35 +62,32 @@ local function fetch(file)
 	return nil
 end
 
-notify("Loader v4", "Starting...", 2)
-print("[Loader v4] loading " .. #MODULES .. " modules; blocked sounds: " .. table.concat(BLOCKED_SOUND_IDS, ", "))
+notify("Loader v5", "Starting...", 2)
+print("[Loader v5] loading " .. #MODULES .. " modules")
 
 local loaded = 0
 for _, mod in ipairs(MODULES) do
 	local src = fetch(mod.file)
 	if not src then
-		warn("[Loader v4] fetch FAIL: " .. mod.file)
-		notify("Loader v4", mod.name .. ": fetch fail", 4)
+		warn("[Loader v5] fetch FAIL: " .. mod.file)
+		notify("Loader v5", mod.name .. ": fetch fail", 4)
 	else
 		local fn, err = loadstring(src, mod.name)
 		if not fn then
-			warn("[Loader v4] compile FAIL " .. mod.name .. ": " .. tostring(err))
-			notify("Loader v4", mod.name .. ": compile fail", 4)
+			warn("[Loader v5] compile FAIL " .. mod.name .. ": " .. tostring(err))
 		else
 			local ok, runErr = pcall(fn)
 			if not ok then
-				warn("[Loader v4] runtime FAIL " .. mod.name .. ": " .. tostring(runErr))
-				notify("Loader v4", mod.name .. ": runtime fail", 4)
+				warn("[Loader v5] runtime FAIL " .. mod.name .. ": " .. tostring(runErr))
 			else
-				print("[Loader v4] OK " .. mod.name)
+				print("[Loader v5] OK " .. mod.name)
 				loaded = loaded + 1
 			end
 		end
 	end
-	-- Extra scrub after each module in case it spawned sounds during init
 	pcall(scrub)
 	task.wait(0.15)
 end
 
-notify("Loader v4", "Loaded " .. loaded .. "/" .. #MODULES .. ". Panel top-right", 5)
-print("[Loader v4] Done: " .. loaded .. "/" .. #MODULES)
+notify("Loader v5", "Loaded " .. loaded .. "/" .. #MODULES, 5)
+print("[Loader v5] Done: " .. loaded .. "/" .. #MODULES)
