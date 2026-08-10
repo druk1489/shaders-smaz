@@ -42,6 +42,7 @@ local MODULES = {
 	{name = "Rain v13", file = "rain_v11.lua"},
 	{name = "Lightning v13", file = "lightning_v12.lua"},
 	{name = "Reflections v1", file = "reflections_v1.lua"},
+	{name = "Presets v1", file = "presets_v1.lua"},
 	{name = "Control Panel", file = "control_panel.lua"},
 }
 
