@@ -1,4 +1,4 @@
--- Control Panel v2 - unified GUI for all SMAZ modules incl. reflections
+-- Control Panel v3 - unified GUI for all SMAZ modules incl. reflections + presets
 
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
@@ -30,7 +30,7 @@ Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 10)
 
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -70, 1, 0); title.Position = UDim2.new(0, 12, 0, 0); title.BackgroundTransparency = 1
-title.Text = "SMAZ v12  Control Panel"; title.TextColor3 = Color3.fromRGB(220, 225, 245)
+title.Text = "SMAZ v13  Control Panel"; title.TextColor3 = Color3.fromRGB(220, 225, 245)
 title.Font = Enum.Font.GothamBold; title.TextSize = 13; title.TextXAlignment = Enum.TextXAlignment.Left
 title.Parent = titleBar
 
@@ -44,7 +44,7 @@ Instance.new("UICorner", minBtn).CornerRadius = UDim.new(0, 4)
 local reopenBtn = Instance.new("TextButton")
 reopenBtn.Size = UDim2.new(0, 90, 0, 28); reopenBtn.Position = UDim2.new(1, -110, 0, 60)
 reopenBtn.BackgroundColor3 = Color3.fromRGB(35, 40, 55); reopenBtn.BorderSizePixel = 0
-reopenBtn.Text = "SMAZ v12"; reopenBtn.TextColor3 = Color3.fromRGB(220, 225, 245)
+reopenBtn.Text = "SMAZ v13"; reopenBtn.TextColor3 = Color3.fromRGB(220, 225, 245)
 reopenBtn.Font = Enum.Font.GothamBold; reopenBtn.TextSize = 12; reopenBtn.Visible = false; reopenBtn.Parent = gui
 Instance.new("UICorner", reopenBtn).CornerRadius = UDim.new(0, 6)
 
@@ -182,7 +182,23 @@ local function buildReflections()
 	end)
 end
 
-buildRain(); buildTornado(); buildLightning(); buildReflections()
+local function buildPresets()
+	local API = getgenv and getgenv().SMAZ_PRESETS; if not API then return end
+	local sec = makeSection("PRESETS", 5)
+	local info = makeLabel(sec, 1)
+	local order = API.list()
+	for i, name in ipairs(order) do
+		makeButton(sec, API.pretty(name), i + 1, function()
+			API.apply(name)
+		end)
+	end
+	makeButton(sec, "Reset to default", #order + 2, function() API.reset() end)
+	table.insert(refreshers, function()
+		info.Text = "Current: " .. tostring(API.current())
+	end)
+end
+
+buildRain(); buildTornado(); buildLightning(); buildReflections(); buildPresets()
 
 task.spawn(function()
 	while gui and gui.Parent do
@@ -191,4 +207,4 @@ task.spawn(function()
 	end
 end)
 
-print("[Control Panel v2] Loaded with " .. #refreshers .. " sections")
+print("[Control Panel v3] Loaded with " .. #refreshers .. " sections")
