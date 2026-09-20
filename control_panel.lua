@@ -1,7 +1,8 @@
--- SMAZ Studio Control Panel v4
--- Профессиональный редактор шейдеров SMAZ:
+-- SMAZ Studio Control Panel v5
+-- Профессиональный редактор шейдеров SMAZ (как в Blender):
 -- * полное редактирование настроек Roblox (Lighting + все виды пост-эффектов);
 -- * второй режим блюра — по дистанции (может делегироваться Atmosphere или работать автономно);
+-- * зерно (grain), виньетка, глубина резкости с автофокусом, режим живой камеры;
 -- * управление модулями SMAZ (молнии/торнадо/дождь/отражения) и пресетами.
 
 local Players = game:GetService("Players")
@@ -24,6 +25,15 @@ local TN = G.SMAZ_TORNADO
 local LG = G.SMAZ_LIGHTNING
 local RF = G.SMAZ_REFL
 local PR = G.SMAZ_PRESETS
+
+local uiFx = {
+	grain = { on = false, amt = 0.5 },
+	vig   = { on = false, amt = 0.35, color = Color3.new(0, 0, 0) },
+	dof   = { auto = false },
+}
+local wCyc    = { on = false, every = 15 }
+local camFov  = { manual = 70 }
+local camBreath = { on = false, amp = 1.5, speed = 0.8 }
 
 local ACCENT  = Color3.fromRGB(90, 130, 255)
 local DANGER  = Color3.fromRGB(235, 80, 90)
@@ -95,7 +105,7 @@ local subT = Instance.new("TextLabel")
 subT.Size = UDim2.new(0, 220, 0, 16)
 subT.Position = UDim2.new(0, 44, 0, 22)
 subT.BackgroundTransparency = 1
-subT.Text = "editor  v4  /  shaders" .. (ATMOS and " / atmos" or " / standalone")
+subT.Text = "editor  v5  /  shaders" .. (ATMOS and " / atmos" or " / standalone")
 subT.TextColor3 = SUB
 subT.Font = Enum.Font.Gotham
 subT.TextSize = 10
@@ -321,13 +331,17 @@ local function makeCycle(rec, order, label, options, getVal, setVal)
 	return b, refresh
 end
 
+local function parentFrame(p)
+	return p.frame or p
+end
+
 local function makeSlider(rec, order, label, getVal, setVal, minV, maxV, fmt)
 	fmt = fmt or "%.2f"
 	local row = Instance.new("Frame")
 	row.Size = UDim2.new(1, 0, 0, 30)
 	row.BackgroundTransparency = 1
 	row.LayoutOrder = order
-	row.Parent = rec.frame
+	row.Parent = parentFrame(rec)
 
 	local lab = Instance.new("TextLabel")
 	lab.Size = UDim2.new(0, 104, 1, 0)
@@ -404,41 +418,52 @@ local function makeSlider(rec, order, label, getVal, setVal, minV, maxV, fmt)
 		end
 	end)
 	refresh()
-	table.insert(rec.refreshers, refresh)
+	if rec.refreshers then table.insert(rec.refreshers, refresh) end
 	return refresh
 end
 
 local function makeColorRow(rec, order, label, getColor, setColor)
-	local row = Instance.new("Frame")
-	row.Size = UDim2.new(1, 0, 0, 74)
-	row.BackgroundTransparency = 1
-	row.LayoutOrder = order
-	row.Parent = rec.frame
+	local group = Instance.new("Frame")
+	group.Size = UDim2.new(1, 0, 0, 0)
+	group.AutomaticSize = Enum.AutomaticSize.Y
+	group.BackgroundTransparency = 1
+	group.LayoutOrder = order
+	group.Parent = parentFrame(rec)
+	local gl = Instance.new("UIListLayout")
+	gl.Padding = UDim.new(0, 0)
+	gl.SortOrder = Enum.SortOrder.LayoutOrder
+	gl.Parent = group
+
+	local chipRow = Instance.new("Frame")
+	chipRow.Size = UDim2.new(1, 0, 0, 20)
+	chipRow.BackgroundTransparency = 1
+	chipRow.LayoutOrder = 1
+	chipRow.Parent = group
 
 	local chip = Instance.new("Frame")
 	chip.Size = UDim2.new(0, 44, 0, 18)
-	chip.Position = UDim2.new(0, 0, 0, 4)
+	chip.Position = UDim2.new(0, 0, 0, 1)
 	chip.BackgroundColor3 = Color3.new(1, 0, 0)
 	chip.BorderSizePixel = 0
-	chip.Parent = row
+	chip.Parent = chipRow
 	Instance.new("UICorner", chip).CornerRadius = UDim.new(0, 5)
 
 	local lab = Instance.new("TextLabel")
 	lab.Size = UDim2.new(0, 200, 0, 18)
-	lab.Position = UDim2.new(0, 50, 0, 4)
+	lab.Position = UDim2.new(0, 50, 0, 1)
 	lab.BackgroundTransparency = 1
 	lab.Text = label
 	lab.TextColor3 = SUB
 	lab.Font = Enum.Font.Gotham
 	lab.TextSize = 11
 	lab.TextXAlignment = Enum.TextXAlignment.Left
-	lab.Parent = row
+	lab.Parent = chipRow
 
-	local r = makeSlider(rec, order * 100 + 1, label .. ": R", function() return (getColor() or Color3.new()).R end,
+	local r = makeSlider(group, 2, label .. ": R", function() return (getColor() or Color3.new()).R end,
 		function(v) setColor(Color3.new(v, (getColor() or Color3.new()).G, (getColor() or Color3.new()).B)) end, 0, 1, "%.3f")
-	local g = makeSlider(rec, order * 100 + 2, label .. ": G", function() return (getColor() or Color3.new()).G end,
+	local g = makeSlider(group, 3, label .. ": G", function() return (getColor() or Color3.new()).G end,
 		function(v) setColor(Color3.new((getColor() or Color3.new()).R, v, (getColor() or Color3.new()).B)) end, 0, 1, "%.3f")
-	local b = makeSlider(rec, order * 100 + 3, label .. ": B", function() return (getColor() or Color3.new()).B end,
+	local b = makeSlider(group, 4, label .. ": B", function() return (getColor() or Color3.new()).B end,
 		function(v) setColor(Color3.new((getColor() or Color3.new()).R, (getColor() or Color3.new()).G, v)) end, 0, 1, "%.3f")
 	local function refresh()
 		local c = getColor() or Color3.new()
@@ -448,6 +473,30 @@ local function makeColorRow(rec, order, label, getColor, setColor)
 	table.insert(rec.refreshers, refresh)
 	refresh()
 	return refresh
+end
+
+local function makeHeader(rec, order, text)
+	local h = Instance.new("Frame")
+	h.Size = UDim2.new(1, 0, 0, 22)
+	h.BackgroundTransparency = 1
+	h.LayoutOrder = order
+	h.Parent = parentFrame(rec)
+	local l = Instance.new("TextLabel")
+	l.Size = UDim2.new(1, 0, 1, 0)
+	l.BackgroundTransparency = 1
+	l.Text = text
+	l.TextColor3 = Color3.fromRGB(120, 150, 230)
+	l.Font = Enum.Font.GothamBold
+	l.TextSize = 11
+	l.TextXAlignment = Enum.TextXAlignment.Left
+	l.Parent = h
+	local line = Instance.new("Frame")
+	line.Size = UDim2.new(1, 0, 0, 1)
+	line.Position = UDim2.new(0, 0, 1, -1)
+	line.BackgroundColor3 = Color3.fromRGB(70, 80, 110)
+	line.BorderSizePixel = 0
+	line.Parent = h
+	return h
 end
 
 local function makeInfo(rec, order, text)
@@ -502,75 +551,92 @@ end
 --==========================================================
 local LHT = makeSection("СВЕТ", 1)
 makeNav("СВЕТ", 1)
+local ord = 1
+local function nxt() local v = ord; ord = ord + 1; return v end
+
+makeHeader(LHT, nxt(), "ОСВЕЩЕНИЕ / ВРЕМЯ")
 if ATMOS then
-	makeSlider(LHT, 1, "Яркость (макс.)", function() return ATMOS.get("maxBrightness") or 2.5 end,
+	makeSlider(LHT, nxt(), "Яркость (макс.)", function() return ATMOS.get("maxBrightness") or 2.5 end,
 		function(v) ATMOS.set("maxBrightness", v) end, 0.3, 10, "%.2f")
-	makeToggle(LHT, 2, "Цикл день/ночь", function() return ATMOS.get("dayNight") ~= false end,
+	makeToggle(LHT, nxt(), "Цикл день/ночь", function() return ATMOS.get("dayNight") ~= false end,
 		function(v) ATMOS.set("dayNight", v) end)
-	makeSlider(LHT, 3, "Время суток", function() return ATMOS.get("timeOfDay") or 12 end,
+	makeSlider(LHT, nxt(), "Время суток", function() return ATMOS.get("timeOfDay") or 12 end,
 		function(v) ATMOS.set("dayNight", false); ATMOS.set("timeOfDay", v) end, 0, 24, "%.1f")
 else
-	makeSlider(LHT, 1, "Яркость", function() return getL("Brightness") or 1 end,
+	makeSlider(LHT, nxt(), "Яркость", function() return getL("Brightness") or 1 end,
 		function(v) setL("Brightness", v) end, 0, 10, "%.2f")
-	makeSlider(LHT, 2, "Время суток", function() return getL("ClockTime") or 12 end,
+	makeSlider(LHT, nxt(), "Время суток", function() return getL("ClockTime") or 12 end,
 		function(v) setL("ClockTime", v) end, 0, 24, "%.1f")
 end
-makeToggle(LHT, 4, "Глобальные тени", function() return getL("GlobalShadows") end,
-	function(v) setL("GlobalShadows", v) end)
-makeSlider(LHT, 5, "Экспозиция (EV)", function() return getL("ExposureCompensation") or 0 end,
+
+makeHeader(LHT, nxt(), "ЭКСПОЗИЦИЯ")
+makeSlider(LHT, nxt(), "Экспозиция (EV)", function() return getL("ExposureCompensation") or 0 end,
 	function(v) setL("ExposureCompensation", v) end, -5, 5, "%.2f")
-makeSlider(LHT, 6, "Мягкость теней", function() return getL("ShadowSoftness") or 0 end,
+
+makeHeader(LHT, nxt(), "ТЕНИ")
+makeToggle(LHT, nxt(), "Глобальные тени", function() return getL("GlobalShadows") end,
+	function(v) setL("GlobalShadows", v) end)
+makeSlider(LHT, nxt(), "Мягкость теней", function() return getL("ShadowSoftness") or 0 end,
 	function(v) setL("ShadowSoftness", v) end, 0, 1, "%.2f")
-makeSlider(LHT, 7, "Спекуляр", function() return getL("SpecularScale") or 1 end,
+makeSlider(LHT, nxt(), "Интенсивность тени", function() return getL("ShadowIntensity") or 0 end,
+	function(v) setL("ShadowIntensity", v) end, 0, 1, "%.2f")
+
+makeHeader(LHT, nxt(), "ОКРУЖЕНИЕ / ТЕХНОЛОГИЯ")
+makeSlider(LHT, nxt(), "Спекуляр", function() return getL("SpecularScale") or 1 end,
 	function(v) setL("SpecularScale", v) end, 0, 1, "%.2f")
-makeSlider(LHT, 8, "Диффузия окруж.", function() return getL("EnvironmentDiffuseScale") or 1 end,
+makeSlider(LHT, nxt(), "Диффузия окруж.", function() return getL("EnvironmentDiffuseScale") or 1 end,
 	function(v) setL("EnvironmentDiffuseScale", v) end, 0, 1, "%.2f")
-makeSlider(LHT, 9, "Спекуляр окруж.", function() return getL("EnvironmentSpecularScale") or 1 end,
+makeSlider(LHT, nxt(), "Спекуляр окруж.", function() return getL("EnvironmentSpecularScale") or 1 end,
 	function(v) setL("EnvironmentSpecularScale", v) end, 0, 1, "%.2f")
-makeSlider(LHT, 10, "Широта (GeoL)", function() return getL("GeographicLatitude") or 0 end,
+makeSlider(LHT, nxt(), "Широта (GeoL)", function() return getL("GeographicLatitude") or 0 end,
 	function(v) setL("GeographicLatitude", v) end, -90, 90, "%.0f")
-makeCycle(LHT, 11, "Технология", {"Legacy","Voxel","ShadowMap","Compatibility","Future","Video"}, getTech, setTech)
+makeCycle(LHT, nxt(), "Технология", {"Legacy","Voxel","ShadowMap","Compatibility","Future","Video"}, getTech, setTech)
 
-makeToggle(LHT, 12, "Туман", function() return getL("FogEnabled") end,
+makeHeader(LHT, nxt(), "ТУМАН")
+makeToggle(LHT, nxt(), "Туман", function() return getL("FogEnabled") end,
 	function(v) setL("FogEnabled", v) end)
-makeSlider(LHT, 13, "Fog Start", function() return getL("FogStart") or 0 end,
+makeSlider(LHT, nxt(), "Fog Start", function() return getL("FogStart") or 0 end,
 	function(v) setL("FogStart", v) end, 0, 100000, "%.0f")
-makeSlider(LHT, 14, "Fog End", function() return getL("FogEnd") or 1024 end,
+makeSlider(LHT, nxt(), "Fog End", function() return getL("FogEnd") or 1024 end,
 	function(v) setL("FogEnd", v) end, 0, 100000, "%.0f")
-makeColorRow(LHT, 15, "Цвет тумана", function() return getL("FogColor") or Color3.new(0.75,0.78,0.8) end,
+makeColorRow(LHT, nxt(), "Цвет тумана", function() return getL("FogColor") or Color3.new(0.75,0.78,0.8) end,
 	function(c) setL("FogColor", c) end)
+makeToggle(LHT, nxt(), "Туман на прозрачных материалах", function() return getL("FogTransparencyMaterials") == true end,
+	function(v) setL("FogTransparencyMaterials", v) end)
 
-makeColorRow(LHT, 16, "Ambient", function() return getL("Ambient") or Color3.new(0.1,0.1,0.1) end,
+makeHeader(LHT, nxt(), "ОКРУЖАЮЩИЙ СВЕТ (AMBIENT)")
+makeColorRow(LHT, nxt(), "Ambient", function() return getL("Ambient") or Color3.new(0.1,0.1,0.1) end,
 	function(c) setL("Ambient", c) end)
-makeColorRow(LHT, 17, "OutdoorAmbient", function() return getL("OutdoorAmbient") or Color3.new(0,0,0) end,
+makeColorRow(LHT, nxt(), "OutdoorAmbient", function() return getL("OutdoorAmbient") or Color3.new(0,0,0) end,
 	function(c) setL("OutdoorAmbient", c) end)
-makeColorRow(LHT, 18, "AmbientSky", function() return getL("AmbientSkyColor") or Color3.new(0.4,0.4,0.4) end,
+makeColorRow(LHT, nxt(), "AmbientSky", function() return getL("AmbientSkyColor") or Color3.new(0.4,0.4,0.4) end,
 	function(c) setL("AmbientSkyColor", c) end)
-makeColorRow(LHT, 19, "IndoorAmbient", function() return getL("IndoorAmbient") or Color3.new(0,0,0) end,
+makeColorRow(LHT, nxt(), "IndoorAmbient", function() return getL("IndoorAmbient") or Color3.new(0,0,0) end,
 	function(c) setL("IndoorAmbient", c) end)
 
+makeHeader(LHT, nxt(), "АТМОСФЕРА (ОБЪЕКТ ROBLOX)")
 local function atmosphereObj()
 	return Lighting:FindFirstChildOfClass("Atmosphere")
 end
-makeInfo(LHT, 20, "Atmosphere (объект Roblox): Density/Haze — через слой Atmosphere. Остальное — напрямую.")
-makeSlider(LHT, 21, "Atm: Плотность", function()
+makeSlider(LHT, nxt(), "Плотность", function()
 	local a = atmosphereObj(); local ok, v = pcall(function() return ATMOS and ATMOS.get("atmDensity") or (a and a.Density or 0.3) end)
 	return ok and v or 0.3
 end, function(v)
 	if ATMOS then ATMOS.set("atmDensity", v) else local a = atmosphereObj(); if a then pcall(function() a.Density = v end) end end
 end, 0, 1, "%.2f")
-makeSlider(LHT, 22, "Atm: Дымка (Haze)", function()
+makeSlider(LHT, nxt(), "Дымка (Haze)", function()
 	local a = atmosphereObj(); local ok, v = pcall(function() return ATMOS and ATMOS.get("atmHaze") or (a and a.Haze or 1.4) end)
 	return ok and v or 1.4
 end, function(v)
 	if ATMOS then ATMOS.set("atmHaze", v) else local a = atmosphereObj(); if a then pcall(function() a.Haze = v end) end end
 end, 0, 4, "%.2f")
-makeSlider(LHT, 23, "Atm: Offset", function() local a = atmosphereObj(); local ok, v = pcall(function() return a and a.Offset or 0 end) return ok and v or 0 end,
+makeSlider(LHT, nxt(), "Offset", function() local a = atmosphereObj(); local ok, v = pcall(function() return a and a.Offset or 0 end) return ok and v or 0 end,
 	function(v) local a = atmosphereObj(); if a then pcall(function() a.Offset = v end) end end, -1, 1, "%.2f")
-makeSlider(LHT, 24, "Atm: Glare", function() local a = atmosphereObj(); local ok, v = pcall(function() return a and a.Glare or 0 end) return ok and v or 0 end,
+makeSlider(LHT, nxt(), "Glare", function() local a = atmosphereObj(); local ok, v = pcall(function() return a and a.Glare or 0 end) return ok and v or 0 end,
 	function(v) local a = atmosphereObj(); if a then pcall(function() a.Glare = v end) end end, 0, 1, "%.2f")
-makeSlider(LHT, 25, "Atm: Distortion", function() local a = atmosphereObj(); local ok, v = pcall(function() return a and a.DistortionScale or 0 end) return ok and v or 0 end,
+makeSlider(LHT, nxt(), "Distortion", function() local a = atmosphereObj(); local ok, v = pcall(function() return a and a.DistortionScale or 0 end) return ok and v or 0 end,
 	function(v) local a = atmosphereObj(); if a then pcall(function() a.DistortionScale = v end) end end, 0, 10, "%.2f")
+makeInfo(LHT, nxt(), "Atmosphere (объект Roblox): Density/Haze — через слой Atmosphere если он загружен, остальное — напрямую в объект.")
 
 --==========================================================
 -- РАЗДЕЛ: ПОСТ FX (использовать Effect-объекты Roblox)
@@ -578,25 +644,30 @@ makeSlider(LHT, 25, "Atm: Distortion", function() local a = atmosphereObj(); loc
 local FX = makeSection("ПОСТ FX", 2)
 makeNav("ПОСТ FX", 2)
 
+local ord = 0
+local function nxt() ord = ord + 1; return ord end
+
+makeHeader(FX, nxt(), "BLOOM / СВЕЧЕНИЕ")
 local bloomFx = getOrCreate("__PanelBloom", "BloomEffect")
-makeToggle(FX, 1, "Bloom", function()
+makeToggle(FX, nxt(), "Bloom", function()
 	if ATMOS then return ATMOS.get("bloom") ~= false end
 	return bloomFx.Enabled == true
 end, function(v)
 	if ATMOS then ATMOS.set("bloom", v) else pcall(function() bloomFx.Enabled = v end) end
 end)
-makeSlider(FX, 2, "Bloom Intensity", function()
+makeSlider(FX, nxt(), "Интенсивность", function()
 	if ATMOS and ATMOS.get("bloomIntensity") and ATMOS.get("bloomIntensity") > 0 then return ATMOS.get("bloomIntensity") end
 	local ok, v = pcall(function() return bloomFx.Intensity end); return ok and v or 1
 end, function(v)
 	if ATMOS then ATMOS.set("bloomIntensity", v) end
 	pcall(function() bloomFx.Intensity = v end)
 end, 0, 5, "%.2f")
-makeSlider(FX, 3, "Bloom Size", function() local ok, v = pcall(function() return bloomFx.Size end) return ok and v or 20 end,
+makeSlider(FX, nxt(), "Размер", function() local ok, v = pcall(function() return bloomFx.Size end) return ok and v or 20 end,
 	function(v) pcall(function() bloomFx.Size = v end) end, 0, 100, "%.0f")
-makeSlider(FX, 4, "Bloom Threshold", function() local ok, v = pcall(function() return bloomFx.Threshold end) return ok and v or 1 end,
+makeSlider(FX, nxt(), "Порог (Threshold)", function() local ok, v = pcall(function() return bloomFx.Threshold end) return ok and v or 1 end,
 	function(v) pcall(function() bloomFx.Threshold = v end) end, 0, 3, "%.2f")
 
+makeHeader(FX, nxt(), "BLUR / РАЗМЫТИЕ")
 local myBlurFx = nil
 local function panelBlurFx()
 	if ATMOS then return nil end
@@ -609,7 +680,7 @@ local sBlur = {
 	size   = (ATMOS and ATMOS.get("blurAmt")) or 12,
 	maxDist= (ATMOS and ATMOS.get("blurMaxDist")) or 250,
 }
-makeToggle(FX, 5, "Blur", function()
+makeToggle(FX, nxt(), "Blur", function()
 	if ATMOS then return ATMOS.get("blur") == true end
 	return sBlur.on
 end, function(v)
@@ -620,7 +691,7 @@ end, function(v)
 		if fx then pcall(function() fx.Enabled = v end) end
 	end
 end)
-makeSlider(FX, 6, "Blur Size", function()
+makeSlider(FX, nxt(), "Сила (Size)", function()
 	if ATMOS then return ATMOS.get("blurAmt") or sBlur.size end
 	return sBlur.size
 end, function(v)
@@ -631,14 +702,14 @@ end, function(v)
 		if fx and sBlur.on and sBlur.mode == "global" then pcall(function() fx.Size = v end) end
 	end
 end, 0, 60, "%.0f")
-makeCycle(FX, 7, "Режим блюра", {"global", "distance"}, function()
+makeCycle(FX, nxt(), "Режим блюра", {"global", "distance"}, function()
 	if ATMOS then return ATMOS.getBlurMode() or "global" end
 	return sBlur.mode
 end, function(v)
 	sBlur.mode = v
 	if ATMOS then ATMOS.setBlurMode(v) end
 end)
-makeSlider(FX, 8, "Макс. дистанция", function()
+makeSlider(FX, nxt(), "Макс. дистанция", function()
 	if ATMOS then return ATMOS.get("blurMaxDist") or sBlur.maxDist end
 	return sBlur.maxDist
 end, function(v)
@@ -668,26 +739,40 @@ if not ATMOS then
 	end)
 end
 
+makeHeader(FX, nxt(), "ЗЕРНО / ШУМ (GRAIN)")
+makeToggle(FX, nxt(), "Зерно", function() return uiFx.grain.on end, function(v) uiFx.grain.on = v end)
+makeSlider(FX, nxt(), "Интенсивность", function() return uiFx.grain.amt end,
+	function(v) uiFx.grain.amt = v end, 0, 1, "%.2f")
+
+makeHeader(FX, nxt(), "ВИНЬЕТКА")
+makeToggle(FX, nxt(), "Виньетка", function() return uiFx.vig.on end, function(v) uiFx.vig.on = v end)
+makeSlider(FX, nxt(), "Сила", function() return uiFx.vig.amt end,
+	function(v) uiFx.vig.amt = v end, 0, 1, "%.2f")
+makeColorRow(FX, nxt(), "Цвет", function() return uiFx.vig.color end,
+	function(c) uiFx.vig.color = c end)
+
+makeHeader(FX, nxt(), "ЦВЕТОКОРРЕКЦИЯ")
 local ccFx = getOrCreate("__PanelCC", "ColorCorrectionEffect")
-makeToggle(FX, 9, "ColorCorrection", function() return ccFx.Enabled end,
+makeToggle(FX, nxt(), "ColorCorrection", function() return ccFx.Enabled end,
 	function(v) pcall(function() ccFx.Enabled = v end) end)
-makeSlider(FX, 10, "CC Brightness", function() local ok, v = pcall(function() return ccFx.Brightness end) return ok and v or 0 end,
+makeSlider(FX, nxt(), "Яркость", function() local ok, v = pcall(function() return ccFx.Brightness end) return ok and v or 0 end,
 	function(v) pcall(function() ccFx.Brightness = v end) end, -1, 1, "%.2f")
-makeSlider(FX, 11, "CC Contrast", function() local ok, v = pcall(function() return ccFx.Contrast end) return ok and v or 0 end,
+makeSlider(FX, nxt(), "Контраст", function() local ok, v = pcall(function() return ccFx.Contrast end) return ok and v or 0 end,
 	function(v) pcall(function() ccFx.Contrast = v end) end, -1, 1, "%.2f")
-makeSlider(FX, 12, "CC Saturation", function() local ok, v = pcall(function() return ccFx.Saturation end) return ok and v or 0 end,
+makeSlider(FX, nxt(), "Насыщенность", function() local ok, v = pcall(function() return ccFx.Saturation end) return ok and v or 0 end,
 	function(v) pcall(function() ccFx.Saturation = v end) end, -2, 2, "%.2f")
-makeColorRow(FX, 13, "CC Tint", function() local ok, v = pcall(function() return ccFx.TintColor end) return ok and v or Color3.new(1,1,1) end,
+makeColorRow(FX, nxt(), "Тонировка (Tint)", function() local ok, v = pcall(function() return ccFx.TintColor end) return ok and v or Color3.new(1,1,1) end,
 	function(c) pcall(function() ccFx.TintColor = c end) end)
 
+makeHeader(FX, nxt(), "СОЛНЕЧНЫЕ ЛУЧИ (SunRays)")
 local sunFx = getOrCreate("__PanelSunRays", "SunRaysEffect")
-makeToggle(FX, 14, "SunRays", function()
+makeToggle(FX, nxt(), "SunRays", function()
 	if ATMOS then return ATMOS.get("rays") ~= false end
 	return sunFx.Enabled
 end, function(v)
 	if ATMOS then ATMOS.set("rays", v) else pcall(function() sunFx.Enabled = v end) end
 end)
-makeSlider(FX, 15, "SunRays Int.", function()
+makeSlider(FX, nxt(), "Интенсивность", function()
 	if ATMOS then
 		local ri = ATMOS.get("raysIntensity") or 0
 		return ri > 0 and ri or 0.4
@@ -697,7 +782,7 @@ end, function(v)
 	pcall(function() sunFx.Intensity = v end)
 	if ATMOS then ATMOS.set("raysIntensity", v) end
 end, 0, 2, "%.2f")
-makeSlider(FX, 16, "SunRays Spread", function()
+makeSlider(FX, nxt(), "Spread", function()
 	if ATMOS then
 		local rs = ATMOS.get("raysSpread") or 0
 		return rs > 0 and rs or 0.9
@@ -708,22 +793,64 @@ end, function(v)
 	if ATMOS then ATMOS.set("raysSpread", v) end
 end, 0, 3, "%.2f")
 
+makeHeader(FX, nxt(), "ГЛУБИНА РЕЗКОСТИ (DoF)")
 local dofFx = getOrCreate("__PanelDoF", "DepthOfFieldEffect")
-makeToggle(FX, 17, "DepthOfField", function() return dofFx.Enabled end, function(v) pcall(function() dofFx.Enabled = v end) end)
-makeSlider(FX, 18, "FocusDistance", function() local ok, v = pcall(function() return dofFx.FocusDistance end) return ok and v or 512 end,
+makeToggle(FX, nxt(), "DepthOfField", function() return dofFx.Enabled end, function(v) pcall(function() dofFx.Enabled = v end) end)
+makeSlider(FX, nxt(), "Фокус (FocusDistance)", function() local ok, v = pcall(function() return dofFx.FocusDistance end) return ok and v or 512 end,
 	function(v) pcall(function() dofFx.FocusDistance = v end) end, 0, 10000, "%.0f")
-makeSlider(FX, 19, "InFocusRadius", function() local ok, v = pcall(function() return dofFx.InFocusRadius end) return ok and v or 256 end,
+makeSlider(FX, nxt(), "Зона фокуса", function() local ok, v = pcall(function() return dofFx.InFocusRadius end) return ok and v or 256 end,
 	function(v) pcall(function() dofFx.InFocusRadius = v end) end, 0, 3000, "%.0f")
-makeSlider(FX, 20, "Far Int.", function() local ok, v = pcall(function() return dofFx.FarIntensity end) return ok and v or 0.3 end,
+makeSlider(FX, nxt(), "Дальний блюр", function() local ok, v = pcall(function() return dofFx.FarIntensity end) return ok and v or 0.3 end,
 	function(v) pcall(function() dofFx.FarIntensity = v end) end, 0, 1, "%.2f")
-makeSlider(FX, 21, "Near Int.", function() local ok, v = pcall(function() return dofFx.NearIntensity end) return ok and v or 0 end,
+makeSlider(FX, nxt(), "Ближний блюр", function() local ok, v = pcall(function() return dofFx.NearIntensity end) return ok and v or 0 end,
 	function(v) pcall(function() dofFx.NearIntensity = v end) end, 0, 1, "%.2f")
+makeToggle(FX, nxt(), "Автофокус (по прицелу)", function() return uiFx.dof.auto end, function(v) uiFx.dof.auto = v end)
+
+--==========================================================
+-- РАЗДЕЛ: КАМЕРА
+--==========================================================
+local CA = makeSection("КАМЕРА", 3)
+makeNav("КАМЕРА", 3)
+local ord = 1
+local function nxt() local v = ord; ord = ord + 1; return v end
+local camBase = workspace.CurrentCamera
+local camBaseFov = pcall(function() return camBase and camBase.FieldOfView or 70 end) and camBase and camBase.FieldOfView or 70
+camFov.manual = camBaseFov
+
+makeHeader(CA, nxt(), "ПРОЕКЦИЯ")
+makeSlider(CA, nxt(), "FOV (обзор)", function()
+	local c = workspace.CurrentCamera
+	local ok, v = pcall(function() return c and c.FieldOfView or camFov.manual end)
+	return ok and v or camFov.manual
+end, function(v)
+	camFov.manual = v
+	local c = workspace.CurrentCamera
+	if c and not camBreath.on then pcall(function() c.FieldOfView = v end) end
+end, 30, 120, "%.0f")
+makeButton(CA, nxt(), "Сброс FOV (" .. math.floor(camBaseFov) .. "°)", function()
+	camFov.manual = camBaseFov
+	local c = workspace.CurrentCamera
+	if c and not camBreath.on then pcall(function() c.FieldOfView = camBaseFov end) end
+end)
+makeHeader(CA, nxt(), "ПОВЕДЕНИЕ / ЖИВОСТЬ")
+makeToggle(CA, nxt(), "Дышащая перспектива", function() return camBreath.on end, function(v)
+	camBreath.on = v
+	if not v then
+		local c = workspace.CurrentCamera
+		if c then pcall(function() c.FieldOfView = camFov.manual end) end
+	end
+end)
+makeSlider(CA, nxt(), "Амплитуда", function() return camBreath.amp end,
+	function(v) camBreath.amp = v end, 0, 8, "%.2f")
+makeSlider(CA, nxt(), "Скорость", function() return camBreath.speed end,
+	function(v) camBreath.speed = v end, 0.1, 5, "%.2f")
+makeInfo(CA, nxt(), "FOV и «дыхание» применяются к общей камере. Фрикам атмосферы имеет свою камеру.")
 
 --==========================================================
 -- РАЗДЕЛ: АТМОСФЕРА (слой SMAZ_ATMOS)
 --==========================================================
-local A = makeSection("АТМОС", 3)
-makeNav("АТМОС", 3)
+local A = makeSection("АТМОС", 4)
+makeNav("АТМОС", 4)
 if ATMOS then
 	makeToggle(A, 1, "Облака", function() return ATMOS.get("clouds") ~= false end, function(v) ATMOS.set("clouds", v) end)
 	makeSlider(A, 2, "Покрытие облаков", function() return ATMOS.get("cloudCover") or 0.6 end,
@@ -753,6 +880,11 @@ if ATMOS then
 		function(v) ATMOS.set("freeCamSpeed", v) end, 10, 500, "%.0f")
 	makeSlider(A, 15, "Чувств. фрикама", function() return ATMOS.get("sens") or 1 end,
 		function(v) ATMOS.set("sens", v) end, 0.1, 4, "%.2f")
+	makeHeader(A, 16, "ЦИКЛ ДЕНЬ/НОЧЬ")
+	makeSlider(A, 17, "Длит. цикла (сек)", function() return ATMOS.get("dayLength") or 240 end,
+		function(v) ATMOS.set("dayLength", v) end, 60, 3600, "%.0f")
+	makeSlider(A, 18, "Диапазон солнца", function() return ATMOS.get("sunRange") or 60 end,
+		function(v) ATMOS.set("sunRange", v) end, 10, 200, "%.0f")
 else
 	makeInfo(A, 1, "Слой Atmosphere не найден. Пустой клиент: панель работает в автономном режиме.")
 end
@@ -760,8 +892,8 @@ end
 --==========================================================
 -- РАЗДЕЛ: ПОГОДА
 --==========================================================
-local W = makeSection("ПОГОДА", 4)
-makeNav("ПОГОДА", 4)
+local W = makeSection("ПОГОДА", 5)
+makeNav("ПОГОДА", 5)
 if ATMOS then
 	makeButton(W, 1, "☀  Ясно", function() ATMOS.weather.set("none") end)
 	makeButton(W, 2, "🌧  Дождь", function() ATMOS.weather.set("rain") end)
@@ -770,6 +902,10 @@ if ATMOS then
 	makeSlider(W, 5, "Интенсивность", function() return ATMOS.get("weatherIntensity") or 0.6 end,
 		function(v) ATMOS.weather.setIntensity(v) end, 0, 1, "%.2f")
 	makeInfo(W, 6, "Сейчас: " .. tostring(ATMOS.get("weather") or "none"))
+	makeHeader(W, 7, "АВТО-ЦИКЛ ПОГОДЫ")
+	makeToggle(W, 8, "Авто-цикл", function() return wCyc.on end, function(v) wCyc.on = v end)
+	makeSlider(W, 9, "Интервал (сек)", function() return wCyc.every end,
+		function(v) wCyc.every = math.max(3, v) end, 3, 120, "%.0f")
 else
 	makeInfo(W, 1, "Погода управляется через слой Atmosphere.")
 end
@@ -777,8 +913,8 @@ end
 --==========================================================
 -- РАЗДЕЛ: ЭФФЕКТЫ (модули SMAZ)
 --==========================================================
-local M = makeSection("ЭФФЕКТЫ", 5)
-makeNav("ЭФФЕКТЫ", 5)
+local M = makeSection("ЭФФЕКТЫ", 6)
+makeNav("ЭФФЕКТЫ", 6)
 
 local order = 1
 local function nextOrder() local o = order; order = order + 1; return o end
@@ -836,8 +972,8 @@ end
 --==========================================================
 -- РАЗДЕЛ: ПРЕСЕТЫ
 --==========================================================
-local P = makeSection("ПРЕСЕТЫ", 6)
-makeNav("ПРЕСЕТЫ", 6)
+local P = makeSection("ПРЕСЕТЫ", 7)
+makeNav("ПРЕСЕТЫ", 7)
 if PR then
 	local list = pcall(function() return PR.list() end) and PR.list() or {}
 	local o = 1
@@ -859,8 +995,8 @@ end
 --==========================================================
 -- РАЗДЕЛ: ИНФО
 --==========================================================
-local I = makeSection("ИНФО", 7)
-makeNav("ИНФО", 7)
+local I = makeSection("ИНФО", 8)
+makeNav("ИНФО", 8)
 makeInfo(I, 1, "ОСНОВНЫЕ ХОТКЕИ")
 makeInfo(I, 2, "Shift+P — фрикам (атмосфера)")
 makeInfo(I, 3, "X — скрыть GUI атмосферы")
@@ -868,6 +1004,145 @@ makeInfo(I, 4, "RightShift — панель атмосферы")
 makeInfo(I, 5, "RightControl — показать/скрыть панель")
 makeInfo(I, 6, "Все слайдеры и тумблеры пишут в Lighting и Пост-эффекты напрямую. Поля адаптируются под слой Atmosphere, если он загружен.")
 makeInfo(I, 7, "Режим блюра: global — равномерный, distance — зависит от дистанции до препятствия по лучу камеры.")
+makeInfo(I, 8, "Вкладки: СВЕТ, ПОСТ FX, КАМЕРА, АТМОС (если слой загружен), ПОГОДА, ЭФФЕКТЫ, ПРЕСЕТЫ.")
+
+--==========================================================
+-- ДВИЖОК UI-ЭФФЕКТОВ: зерно, виньетка, автофокус DoF,
+-- «дыхание» камеры, авто-цикл погоды
+--==========================================================
+local grainGui = Instance.new("ScreenGui")
+grainGui.Name = "SMAZ_Grain"
+grainGui.ResetOnSpawn = false
+grainGui.IgnoreGuiInset = true
+grainGui.DisplayOrder = 902
+grainGui.Parent = pgui
+local grainHolder = Instance.new("Frame")
+grainHolder.Size = UDim2.new(1, 0, 1, 0)
+grainHolder.BackgroundTransparency = 1
+grainHolder.BorderSizePixel = 0
+grainHolder.Parent = grainGui
+local grainDots = {}
+local GRAIN_GRID = 8
+for _ = 1, GRAIN_GRID * GRAIN_GRID do
+	local d = Instance.new("TextLabel")
+	d.BackgroundTransparency = 1
+	d.BorderSizePixel = 0
+	d.Size = UDim2.new(0, 3, 0, 3)
+	d.AnchorPoint = Vector2.new(0.5, 0.5)
+	d.Text = "+"
+	d.Font = Enum.Font.GothamBold
+	d.TextSize = 7
+	d.TextColor3 = Color3.new(1, 1, 1)
+	d.TextTransparency = 1
+	d.Parent = grainHolder
+	table.insert(grainDots, d)
+end
+grainGui.Enabled = false
+
+local vigGui = Instance.new("ScreenGui")
+vigGui.Name = "SMAZ_Vignette"
+vigGui.ResetOnSpawn = false
+vigGui.IgnoreGuiInset = true
+vigGui.DisplayOrder = 901
+vigGui.Parent = pgui
+local vigStrips = {}
+local function vigStrip(size, pos, anchor, rotation, outerAtStart)
+	local f = Instance.new("Frame")
+	f.Size = size
+	f.Position = pos
+	f.AnchorPoint = anchor
+	f.BackgroundColor3 = Color3.new(0, 0, 0)
+	f.BackgroundTransparency = 1
+	f.BorderSizePixel = 0
+	f.Parent = vigGui
+	local g = Instance.new("UIGradient")
+	g.Rotation = rotation
+	g.Parent = f
+	table.insert(vigStrips, { frame = f, grad = g, outerAtStart = outerAtStart })
+end
+vigStrip(UDim2.new(1, 0, 0, 0.5), UDim2.new(0, 0, 0, 0), Vector2.new(0, 0), 0, true)
+vigStrip(UDim2.new(1, 0, 0, 0.5), UDim2.new(0, 0, 1, 0), Vector2.new(0, 1), 0, false)
+vigStrip(UDim2.new(0, 0.5, 1, 0), UDim2.new(0, 0, 0, 0), Vector2.new(0, 0), 90, true)
+vigStrip(UDim2.new(0, 0.5, 1, 0), UDim2.new(1, 0, 0, 0), Vector2.new(1, 0), 90, false)
+
+local function vigApply()
+	if uiFx.vig.on and uiFx.vig.amt > 0 then
+		vigGui.Enabled = true
+		local outer = math.clamp(1 - uiFx.vig.amt, 0, 1)
+		for _, s in ipairs(vigStrips) do
+			s.frame.BackgroundColor3 = uiFx.vig.color
+			if s.outerAtStart then
+				s.grad.Transparency = NumberSequence.new(outer, 1)
+			else
+				s.grad.Transparency = NumberSequence.new(1, outer)
+			end
+		end
+	else
+		vigGui.Enabled = false
+	end
+end
+vigApply()
+
+local weatherSeq = { "none", "rain", "snow", "hail" }
+local function weatherCycle()
+	local cur = ATMOS and ATMOS.get("weather") or "none"
+	local idx = 1
+	for i, w in ipairs(weatherSeq) do
+		if w == cur then idx = i end
+	end
+	local nx = weatherSeq[(idx % #weatherSeq) + 1]
+	if ATMOS then pcall(function() ATMOS.weather.set(nx) end) end
+end
+
+RunService.RenderStepped:Connect(function()
+	if uiFx.grain.on and uiFx.grain.amt > 0 then
+		grainGui.Enabled = true
+		local i = 1
+		for y = 1, GRAIN_GRID do
+			for x = 1, GRAIN_GRID do
+				local d = grainDots[i]
+				i = i + 1
+				d.Position = UDim2.new((x - 0.5) / GRAIN_GRID, math.random(-math.floor((GRAIN_GRID - x) * 1.6), math.floor(x * 1.6)), (y - 0.5) / GRAIN_GRID, math.random(-math.floor((GRAIN_GRID - y) * 1.6), math.floor(y * 1.6)))
+				d.TextTransparency = 1 - math.random() * math.clamp(uiFx.grain.amt, 0, 1) * 0.9
+			end
+		end
+	else
+		grainGui.Enabled = false
+	end
+	vigApply()
+	if uiFx.dof.auto then
+		local cam = workspace.CurrentCamera
+		if dofFx and dofFx.Enabled and cam then
+			local prm = RaycastParams.new()
+			prm.FilterType = Enum.RaycastFilterType.Exclude
+			prm.FilterDescendantsInstances = { cam }
+			local hit = workspace:Raycast(cam.CFrame.Position, cam.CFrame.LookVector * 600, prm)
+			pcall(function() dofFx.FocusDistance = hit and hit.Distance or 600 end)
+		end
+	end
+	if camBreath.on then
+		local cam = workspace.CurrentCamera
+		if cam then
+			pcall(function() cam.FieldOfView = camFov.manual + camBreath.amp * math.sin(tick() * camBreath.speed) end)
+		end
+	end
+end)
+
+task.spawn(function()
+	local acc = 0
+	while gui and gui.Parent do
+		task.wait(1)
+		if wCyc.on and ATMOS then
+			acc = acc + 1
+			if acc >= wCyc.every then
+				acc = 0
+				pcall(weatherCycle)
+			end
+		else
+			acc = 0
+		end
+	end
+end)
 
 --==========================================================
 -- ПЕРВЫЙ РАЗДЕЛ + ОБНОВЛЕНИЕ
@@ -887,4 +1162,4 @@ task.spawn(function()
 	end
 end)
 
-print("[SMAZ Studio v4] Panel loaded" .. (ATMOS and " (atmos API)" or " (standalone)"))
+print("[SMAZ Studio v5] Panel loaded" .. (ATMOS and " (atmos API)" or " (standalone)"))
