@@ -15,6 +15,7 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/druk1489/shaders-smaz
 ## Хоткеи
 - **Shift+P** — фрикам (WASD движение, E/Q вверх/вниз, удерживай ПКМ + мышь — обзор, колесо — зум, Shift — медленно, Ctrl — быстро)
 - **RightControl** — показать/скрыть панель (клавиша переназначается в НАСТРОЙКИ)
+- **X** — спрятать ВСЕ гуи (все ScreenGui скрипта + core UI), ещё раз X — показать обратно
 
 ## Что стало с настройками
 - При входе **ничего не применяется**: blur / bloom / sunrays / sharpen / погода /

@@ -4044,7 +4044,7 @@ end)
 mkInfoCard(pSet, "Файл: " .. savePath .. ". Без save-функции (напр. синх-экзекутор) настройки не сохранятся.")
 
 mkSection(pSet, "ИНФО")
-mkInfoCard(pSet, "Хоткеи: " .. tostring(menuBindKey) .. " — показать/скрыть панель. В атмосфере: Shift+P — фрикам.")
+mkInfoCard(pSet, "Хоткеи: " .. tostring(menuBindKey) .. " — показать/скрыть панель; X — спрятать ВСЕ гуи (ещё раз — показать); Shift+P (в атмосфере) — фрикам.")
 mkInfoCard(pSet, "СВЕТ и ПОСТ FX пишут напрямую в Lighting и эффекты. При наличии слоя Atmosphere часть параметров (яркость, bloom, лучи, блюр) идёт через него. Всё в одном проксирующем GUI в стиле Silent Engine UI.")
 
 --==========================================================
@@ -4210,6 +4210,47 @@ UIS.InputBegan:Connect(function(input, gp)
 	if os.clock() - lastCaptureClock < 0.2 then return end
 	if input.KeyCode.Name == menuBindKey then
 		main.Visible = not main.Visible
+	end
+end)
+
+-- X: спрятать ВСЕ GUI (все ScreenGui, что мы создали + core)
+local allGuiHidden = false
+local hiddenGuis = {}
+local function collectGui(parent, out)
+	for _, g in ipairs(parent:GetChildren()) do
+		if g:IsA("ScreenGui") then
+			if g.Name:find("SMAZ", 1, true) or g.Name:find("Atmos", 1, true)
+			or g.Name:find("RainV11", 1, true) or g.Name:find("LightningV12", 1, true)
+			or g.Name:find("__AtmosFlash", 1, true) or g.Name == "SMAZ_ControlPanel" then
+				if g.Enabled then table.insert(out, g); g.Enabled = false end
+			end
+		end
+	end
+end
+local function toggleAllGui()
+	allGuiHidden = not allGuiHidden
+	if allGuiHidden then
+		hiddenGuis = {}
+		pcall(function() StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, false) end)
+		UserInputService.MouseIconEnabled = false
+		collectGui(pgui, hiddenGuis)
+		local coreParent = game:GetService("CoreGui")
+		if coreParent then collectGui(coreParent, hiddenGuis) end
+	else
+		pcall(function() StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.All, true) end)
+		UserInputService.MouseIconEnabled = true
+		for _, g in ipairs(hiddenGuis) do
+			if g and g.Parent and g:IsA("ScreenGui") then g.Enabled = true end
+		end
+		hiddenGuis = {}
+	end
+end
+UIS.InputBegan:Connect(function(input, gp)
+	if gp then return end
+	if activeKeybindBtn then return end
+	if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
+	if input.KeyCode == Enum.KeyCode.X then
+		toggleAllGui()
 	end
 end)
 
