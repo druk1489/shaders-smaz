@@ -73,11 +73,12 @@ end)
 local S = {
 	clouds=true, cloudAnimate=true, cloudCover=0.6, cloudDensity=0.55, cloudColor=0.9, cloudSpeed=0.5,
 	rays=true, bloom=true, atmosphere=true,
+	bloomIntensity=0, raysIntensity=0, raysSpread=0,
 	dayNight=true, dayLength=240, timeOfDay=12,
 	sunSize=350, sunBright=2, sunRange=60,
 	moonSize=450, moonBright=1,
 	maxBrightness=2.5, atmDensity=0.32, atmHaze=1.4,
-	sharpen=false, sharpenAmt=0.2, blur=false, blurAmt=12,
+	sharpen=false, sharpenAmt=0.2, blur=false, blurAmt=12, blurMode="global", blurMaxDist=250,
 	weather="none", weatherIntensity=0.6,
 	lightning=true, lightningRate=0.5,
 	lightningMinDist=30, lightningMaxDist=180,
@@ -840,15 +841,29 @@ RunService.RenderStepped:Connect(function(dt)
 	atm.Haze    = S.atmHaze
 	atm.Glare   = 0.2 + dayFactor * 0.5
 	bloom.Enabled = S.bloom
-	bloom.Intensity = 1.0 + dayFactor * 0.5
+	bloom.Intensity = (S.bloomIntensity and S.bloomIntensity > 0) and S.bloomIntensity or (1.0 + dayFactor * 0.5)
 	ccFx.Enabled = S.sharpen
 	ccFx.Contrast   = S.sharpenAmt
 	ccFx.Saturation = S.sharpenAmt * 0.5
-	blurFx.Enabled = S.blur
-	blurFx.Size    = S.blur and S.blurAmt or 0
+	if S.blur then
+		local bsize = S.blurAmt
+		if S.blurMode == "distance" then
+			local cam = Camera
+			local prm = RaycastParams.new()
+			prm.FilterType = Enum.RaycastFilterType.Exclude
+			prm.FilterDescendantsInstances = { cam }
+			local hit = workspace:Raycast(cam.CFrame.Position, cam.CFrame.LookVector * S.blurMaxDist, prm)
+			local d = hit and hit.Distance or S.blurMaxDist
+			bsize = S.blurAmt * math.clamp(d / math.max(1, S.blurMaxDist), 0, 1)
+		end
+		blurFx.Enabled = true
+		blurFx.Size    = bsize
+	else
+		blurFx.Enabled = false
+	end
 	rays.Enabled   = S.rays
-	rays.Intensity = S.rays and (0.05 + dayFactor*0.22 + math.sin(t*1.5)*0.02) or 0
-	rays.Spread    = 0.8 + dayFactor*0.4
+	rays.Intensity = (S.raysIntensity and S.raysIntensity > 0) and S.raysIntensity or (0.05 + dayFactor*0.22 + math.sin(t*1.5)*0.02)
+	rays.Spread    = (S.raysSpread and S.raysSpread > 0) and S.raysSpread or (0.8 + dayFactor*0.4)
 
 	weatherPart.Position = camPos + Vector3.new(0, 60, 0)
 	if emitter.Enabled and S.weather ~= "none" then
@@ -1075,6 +1090,12 @@ makeToggle(pFx, "Резкость", "sharpen")
 makeSlider(pFx, "Сила резкости", "sharpenAmt", 0, 1)
 makeToggle(pFx, "Размытие", "blur")
 makeSlider(pFx, "Сила размытия", "blurAmt", 0, 40)
+local blurModeBtn
+blurModeBtn = makeButton(pFx, "Режим блюра: "..(S.blurMode == "distance" and "ПО ДИСТАНЦИИ" or "ГЛОБАЛЬНО"), function()
+	S.blurMode = S.blurMode == "global" and "distance" or "global"
+	blurModeBtn.Text = "Режим блюра: "..(S.blurMode == "distance" and "ПО ДИСТАНЦИИ" or "ГЛОБАЛЬНО")
+end)
+makeSlider(pFx, "Дальность (distance)", "blurMaxDist", 20, 1000)
 
 -- Погода
 local pW = makeTab("Погода")
@@ -1153,6 +1174,29 @@ UserInputService.InputBegan:Connect(function(input, gp)
 end)
 
 print("[Atmosphere v9] OK — Sun/Moon Store models + lightning + shockwave готовы")
+-- Экспорт API для Control Panel и внешних скриптов
+local genv = getgenv or function() return _G end
+genv().SMAZ_ATMOS = {
+	settings = S,
+	get = function(k) return S[k] end,
+	set = function(k, v)
+		if k == "freeCam" then setFreecam(not not v) return S.freeCam end
+		if S[k] ~= nil then S[k] = v end
+		return S[k]
+	end,
+	getBlurMode = function() return S.blurMode end,
+	setBlurMode = function(m) if m == "global" or m == "distance" then S.blurMode = m end end,
+	setBlur = function(v) S.blur = not not v; end,
+	isFreecam = function() return S.freeCam end,
+	setFreecam = function(v) setFreecam(not not v) end,
+	setGuiHidden = function(v) setGuiHidden(not not v) end,
+	weather = {
+		set = function(w) S.weather = w; applyWeather() end,
+		get = function() return S.weather end,
+		setIntensity = function(v) S.weatherIntensity = math.clamp(v, 0, 1) end,
+	},
+}
+print("[Atmosphere v9] API SMAZ_ATMOS экспортирован в getgenv")
 end)
 
 if not ok then
