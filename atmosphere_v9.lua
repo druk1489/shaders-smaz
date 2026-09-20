@@ -872,79 +872,168 @@ RunService.RenderStepped:Connect(function(dt)
 end)
 
 --==============================================================
--- FREECAM (springs)
+-- FREECAM (версия из Mythos admin — Quenty springs, стабильная)
+-- Shift+P вкл/выкл; WASD движение, E/Q вверх/вниз,
+-- удержание ПКМ + мышь = обзор, колесо = зум,
+-- Shift медленно, Ctrl быстро.
 --==============================================================
-local Spring = {}; Spring.__index = Spring
-function Spring.new(freq, pos) return setmetatable({f=freq, p=pos, v=pos*0}, Spring) end
-function Spring:Update(dt, goal)
-	local f = self.f * 2 * pi
-	local p0, v0 = self.p, self.v
-	local offset = goal - p0
-	local decay = exp(-f*dt)
-	local p1 = goal + (v0*dt - offset*(f*dt + 1))*decay
-	local v1 = (f*dt*(offset*f - v0) + v0)*decay
-	self.p, self.v = p1, v1
-	return p1
-end
-function Spring:Reset(pos) self.p, self.v = pos, pos*0 end
-
-local camPos2, camRot, camRoll, rollGoal, fovGoal, savedFov = Vector3.new(), Vector2.new(), 0, 0, 70, 70
-local mouseDelta = Vector2.new()
-local velSpring, rollSpring, fovSpring = Spring.new(6, Vector3.new()), Spring.new(5, 0), Spring.new(5, 0)
-local PAN_SENS = 0.0042
 local FREECAM_BIND = "AtmosFreecam"
-local function down(k) return UserInputService:IsKeyDown(k) and 1 or 0 end
 
-local function stepFreecam(dt)
-	camRot = Vector2.new(
-		clamp(camRot.X - mouseDelta.Y * PAN_SENS * S.sens, -rad(89), rad(89)),
-		camRot.Y - mouseDelta.X * PAN_SENS * S.sens)
-	mouseDelta = Vector2.new()
-	rollGoal = rollGoal + (down(Enum.KeyCode.Z) - down(Enum.KeyCode.C)) * dt * rad(70)
-	camRoll = rollSpring:Update(dt, rollGoal)
-	local fov = fovSpring:Update(dt, fovGoal)
-	local dir = Vector3.new(
-		down(Enum.KeyCode.D) - down(Enum.KeyCode.A),
-		down(Enum.KeyCode.E) - down(Enum.KeyCode.Q),
-		down(Enum.KeyCode.S) - down(Enum.KeyCode.W))
-	local sm = velSpring:Update(dt, dir)
-	local speed = S.freeCamSpeed * (down(Enum.KeyCode.LeftShift)==1 and 3 or 1) * (down(Enum.KeyCode.LeftControl)==1 and 0.3 or 1)
-	local cf = CFrame.new(camPos2) * CFrame.fromEulerAnglesYXZ(camRot.X, camRot.Y, camRoll)
-	camPos2 = camPos2 + cf:VectorToWorldSpace(sm) * speed * dt
-	Camera.CFrame = CFrame.new(camPos2) * CFrame.fromEulerAnglesYXZ(camRot.X, camRot.Y, camRoll)
-	Camera.FieldOfView = fov
+local FC_Spring = {}; FC_Spring.__index = FC_Spring
+function FC_Spring.new(stiffness, dampingCoeff, dampingRatio, initialPos)
+	local self = setmetatable({}, FC_Spring)
+	dampingRatio = dampingRatio or 1
+	local m = dampingCoeff * dampingCoeff / (4 * stiffness * dampingRatio * dampingRatio)
+	self.k = stiffness / m
+	self.d = -dampingCoeff / m
+	self.x = initialPos
+	self.t = initialPos
+	self.v = initialPos * 0
+	return self
 end
+function FC_Spring:Update(dt)
+	local t, k, d, x0, v0 = self.t, self.k, self.d, self.x, self.v
+	local a0 = k * (t - x0) + v0 * d
+	local v1 = v0 + a0 * (dt / 2)
+	local a1 = k * (t - (x0 + v0 * (dt / 2))) + v1 * d
+	local v2 = v0 + a1 * (dt / 2)
+	local a2 = k * (t - (x0 + v1 * (dt / 2))) + v2 * d
+	local v3 = v0 + a2 * dt
+	local x4 = x0 + (v0 + 2 * (v1 + v2) + v3) * (dt / 6)
+	self.x, self.v = x4, v0 + (a0 + 2 * (a1 + a2) + k * (t - (x0 + v2 * dt)) + v3 * d) * (dt / 6)
+	return x4
+end
+function FC_Spring:Reset(pos)
+	self.x, self.v = pos, pos * 0
+	self.t = pos
+end
+
+local FC = {
+	rot = Vector2.new(),
+	pan = Vector2.new(),
+	pos = Vector3.new(),
+	vel = FC_Spring.new(7 / 9, 1 / 3, 1, Vector3.new()),
+	rotS = FC_Spring.new(7 / 9, 1 / 3, 1, Vector2.new()),
+	fovS = FC_Spring.new(2, 1 / 3, 1, 70),
+	rateFov = 0,
+	savedFov = 70,
+	savedCamType = nil,
+	conns = {},
+}
+local FC_Clamp = function(x, mn, mx) return x < mn and mn or x > mx and mx or x end
+local FC_Keys = {
+	left = {"A"}, right = {"D"}, forward = {"W"},
+	backward = {"S"}, up = {"Q"}, down = {"E"},
+}
+local function FC_KeyDown(list)
+	for _, k in ipairs(list) do
+		local kc = Enum.KeyCode[k]
+		if kc and UserInputService:IsKeyDown(kc) then return true end
+	end
+	return false
+end
+
+local function FC_Step(dt)
+	local cam = Camera
+	if not cam then return end
+	local kx = (FC_KeyDown(FC_Keys.right) and 1 or 0) - (FC_KeyDown(FC_Keys.left) and 1 or 0)
+	local ky = (FC_KeyDown(FC_Keys.up) and 1 or 0) - (FC_KeyDown(FC_Keys.down) and 1 or 0)
+	local kz = (FC_KeyDown(FC_Keys.backward) and 1 or 0) - (FC_KeyDown(FC_Keys.forward) and 1 or 0)
+	local km = kx * kx + ky * ky + kz * kz
+	if km > 1e-15 then
+		local slow = 1
+		if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.RightShift) then
+			slow = 1 / 4
+		elseif UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+			slow = 3
+		end
+		km = slow / math.sqrt(km)
+		kx = kx * km; ky = ky * km; kz = kz * km
+	end
+
+	FC.vel.t = Vector3.new(kx, ky, kz) * (S.freeCamSpeed or 140)
+	FC.rotS.t = FC.pan
+	FC.fovS.t = FC_Clamp(FC.fovS.t + dt * FC.rateFov * (-330), 5, 120)
+
+	local fov = FC.fovS:Update(dt)
+	local dPos = FC.vel:Update(dt) * Vector3.new(1, 0.75, 1)
+	local dRot = FC.rotS:Update(dt) * (Vector2.new(0.85, 1) / 128) * (math.tan(fov * math.pi / 360) / math.tan(35 * math.pi / 180)) * (S.sens or 1)
+
+	FC.rateFov = 0
+	FC.pan = Vector2.new()
+	FC.rot = FC.rot + dRot
+	FC.rot = Vector2.new(FC_Clamp(FC.rot.X, -1.5, 1.5), FC.rot.Y)
+
+	local c = CFrame.new(FC.pos) * CFrame.Angles(0, FC.rot.Y, 0) * CFrame.Angles(FC.rot.X, 0, 0) * CFrame.new(dPos)
+	FC.pos = c.p
+	cam.CFrame = c
+	cam.Focus = c * CFrame.new(0, 0, -16)
+	cam.FieldOfView = fov
+end
+
+-- колесо мыши = зум
+local function FC_ProcessInput(input)
+	if input.UserInputType == Enum.UserInputType.MouseWheel then
+		FC.rateFov = input.Position.Z
+	end
+end
+table.insert(FC.conns, UserInputService.InputChanged:Connect(FC_ProcessInput))
+
+-- удержание ПКМ = вращение камеры
+local function FC_OnInput(input, processed)
+	if processed or input.UserInputType ~= Enum.UserInputType.MouseButton2 then return end
+	UserInputService.MouseBehavior = Enum.MouseBehavior.LockCurrentPosition
+	local conn = UserInputService.InputChanged:Connect(function(i, ip)
+		if not ip and i.UserInputType == Enum.UserInputType.MouseMovement then
+			local d = i.Delta
+			FC.pan = FC.pan + Vector2.new(-d.Y, -d.X)
+		end
+	end)
+	repeat
+		input = UserInputService.InputEnded:Wait()
+	until input.UserInputType == Enum.UserInputType.MouseButton2 or not S.freeCam
+	FC.pan = Vector2.new()
+	conn:Disconnect()
+	if S.freeCam then
+		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+	end
+end
+table.insert(FC.conns, UserInputService.InputBegan:Connect(function(input, proc)
+	if S.freeCam then FC_OnInput(input, proc) end
+end))
 
 local function setFreecam(on)
 	S.freeCam = on
 	if on then
-		local cf = Camera.CFrame
-		camPos2 = cf.Position
-		local rx, ry = cf:ToEulerAnglesYXZ()
-		camRot = Vector2.new(rx, ry)
-		rollGoal = 0; camRoll = 0; rollSpring:Reset(0)
-		savedFov = Camera.FieldOfView
-		fovGoal = savedFov; fovSpring:Reset(savedFov)
-		velSpring:Reset(Vector3.new())
-		Camera.CameraType = Enum.CameraType.Scriptable
-		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
-		RunService:BindToRenderStep(FREECAM_BIND, Enum.RenderPriority.Camera.Value + 1, stepFreecam)
+		local cam = Camera
+		local cf = cam.CFrame
+		local lookVector = cf.lookVector.unit
+		FC.rot = Vector2.new(math.asin(lookVector.Y), math.atan2(-lookVector.Z, lookVector.X) - math.pi / 2)
+		FC.pos = cf.p
+		FC.savedFov = cam.FieldOfView
+		FC.fovS = FC_Spring.new(2, 1 / 3, 1, cam.FieldOfView)
+		FC.vel:Reset(Vector3.new())
+		FC.rotS:Reset(Vector2.new())
+		FC.pan = Vector2.new()
+		FC.rateFov = 0
+		FC.savedCamType = cam.CameraType
+		cam.CameraType = Enum.CameraType.Scriptable
+		UserInputService.MouseIconEnabled = true
+		RunService:BindToRenderStep(FREECAM_BIND, Enum.RenderPriority.Camera.Value, function(dt)
+			FC_Step(math.min(dt, 0.1))
+		end)
 	else
 		pcall(function() RunService:UnbindFromRenderStep(FREECAM_BIND) end)
-		Camera.CameraType = Enum.CameraType.Custom
+		local cam = Camera
+		pcall(function()
+			cam.CameraType = FC.savedCamType or Enum.CameraType.Custom
+			cam.FieldOfView = FC.savedFov
+		end)
+		cam.CameraType = FC.savedCamType or Enum.CameraType.Custom
 		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-		Camera.FieldOfView = savedFov
+		UserInputService.MouseIconEnabled = true
 	end
 end
-
-UserInputService.InputChanged:Connect(function(input)
-	if not S.freeCam then return end
-	if input.UserInputType == Enum.UserInputType.MouseMovement then
-		mouseDelta = mouseDelta + Vector2.new(input.Delta.X, input.Delta.Y)
-	elseif input.UserInputType == Enum.UserInputType.MouseWheel then
-		fovGoal = clamp(fovGoal - input.Position.Z * 6, 10, 120)
-	end
-end)
 
 --==============================================================
 -- GUI
@@ -1130,7 +1219,7 @@ makeButton(pT, "🗑 Убрать торнадо", function() killTornado() end)
 
 -- Камера
 local pCam = makeTab("Камера")
-makeLabel(pCam, "Shift+P — фрикам\nWASD — движение, E/Q — вверх/вниз\nZ/C — наклон, колесо — зум\nShift быстрее, Ctrl медленнее\nX — скрыть GUI")
+makeLabel(pCam, "Shift+P — фрикам\nWASD — движение, E/Q — вверх/вниз\nудерживай ПКМ и двигай мышь — обзор\nколесо — зум, Shift — медленно, Ctrl — быстро\nX — скрыть GUI")
 makeSlider(pCam, "Скорость", "freeCamSpeed", 20, 400)
 makeSlider(pCam, "Чувствительность", "sens", 0.2, 3)
 
