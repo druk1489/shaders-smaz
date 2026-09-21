@@ -8,7 +8,9 @@
 -- Настройки НЕ применяются при входе (blur/bloom/лучи/погода/модули - выкл).
 --======================================================================
 
---############### MODULE: atmosphere_v9.lua ###############
+
+--############### MODULE: atmosphere_v9.lua (scoped) ###############
+(function()
 --==============================================================
 -- ATMOSPHERE / SHADERS v10 (SILENT ENGINE CORE)
 -- Без собственной GUI: только ядро + API. Панель — Silent Engine.
@@ -1086,8 +1088,11 @@ if not ok then
 		game:GetService("StarterGui"):SetCore("SendNotification", {Title="Atmosphere v9 ERROR", Text=tostring(err), Duration=8})
 	end)
 end
+end)()
 
---############### MODULE: tornado_v10.lua ###############
+
+--############### MODULE: tornado_v10.lua (scoped) ###############
+(function()
 -- Tornado v13 - no hotkeys, no own GUI, autoSpawn=false default, SMAZ_TORNADO API
 
 if getgenv and getgenv().__TORNADO_V10_LOADED then
@@ -1435,8 +1440,11 @@ if getgenv then
 end
 
 print("[Tornado v13] Loaded (autoSpawn OFF), API: getgenv().SMAZ_TORNADO")
+end)()
 
---############### MODULE: rain_v11.lua ###############
+
+--############### MODULE: rain_v11.lua (scoped) ###############
+(function()
 -- Rain v13 - no hotkeys, exposes SMAZ_RAIN API for control panel
 
 if getgenv and getgenv().__RAIN_V11_LOADED then
@@ -1639,8 +1647,11 @@ if getgenv then
 end
 
 print("[Rain v13] Loaded, API: getgenv().SMAZ_RAIN")
+end)()
 
---############### MODULE: lightning_v12.lua ###############
+
+--############### MODULE: lightning_v12.lua (scoped) ###############
+(function()
 -- Lightning v13 - no hotkeys, autoOn=false by default, SMAZ_LIGHTNING API
 
 if getgenv and getgenv().__LIGHTNING_V12_LOADED then
@@ -1939,8 +1950,11 @@ if getgenv then
 end
 
 print("[Lightning v13] Loaded (auto OFF), API: getgenv().SMAZ_LIGHTNING")
+end)()
 
---############### MODULE: reflections_v1.lua ###############
+
+--############### MODULE: reflections_v1.lua (scoped) ###############
+(function()
 -- Reflections v1 - real planar reflections via world clones
 -- Clones nearby BaseParts and character bones, mirrors CFrame under a horizontal plane
 -- Correct rotation math: flips pitch and roll, keeps yaw (planar mirror across Y).
@@ -2183,8 +2197,11 @@ if getgenv then
 end
 
 print("[Reflections v1] Loaded (radius=" .. CFG.radius .. ", API: getgenv().SMAZ_REFL)")
+end)()
 
---############### MODULE: presets_v1.lua ###############
+
+--############### MODULE: presets_v1.lua (scoped) ###############
+(function()
 -- Presets v1 - 20 lighting/graphics presets (adapted from ShaderUtilityV5), exposes SMAZ_PRESETS API
 
 if getgenv and getgenv().__PRESETS_V1_LOADED then
@@ -2669,7 +2686,11 @@ if getgenv then
 end
 
 print("[Presets v1] Loaded, API: getgenv().SMAZ_PRESETS")
---############### MODULE: control_panel.lua ###############
+end)()
+
+
+--############### MODULE: control_panel.lua (scoped) ###############
+(function()
 --==========================================================
 -- SMAZ Studio Control Panel v6 (Silent Engine UI style)
 -- Полный редактор шейдеров: свет, пост-FX, камера/фрикам,
@@ -4285,3 +4306,5 @@ UIS.InputEnded:Connect(function(input)
 end)
 
 print("[SMAZ Studio v6] Panel (Silent Engine UI) loaded" .. (ATMOS and " (atmos API)" or " (standalone)"))
+end)()
+
