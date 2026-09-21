@@ -27,7 +27,16 @@ local function getEffect(name, className)
 	if not obj then
 		obj = Instance.new(className)
 		obj.Name = name
-		obj.Parent = Lighting
+		-- Effects are NOT parented until a preset is applied, so nothing
+		-- gets enabled/applied just by loading the module.
+		if obj:IsA("PostEffect") then obj.Enabled = false end
+		if obj:IsA("Atmosphere") then obj.Density = 0 end
+		if obj:IsA("Sky") then
+			obj.CelestialBodiesShown = false
+			obj.SunAngularSize = 0
+			obj.MoonAngularSize = 0
+			obj.StarCount = 0
+		end
 		table.insert(created, obj)
 	end
 	return obj
@@ -47,7 +56,8 @@ if Terrain then
 	if not Clouds then
 		Clouds = Instance.new("Clouds")
 		Clouds.Name = "SMAZ_P_Clouds"
-		Clouds.Parent = Terrain
+		Clouds.Enabled = false
+		Clouds.Cover = 0
 		table.insert(created, Clouds)
 	end
 end
@@ -355,6 +365,13 @@ local PRETTY = {
 local current = "Default"
 
 local function apply()
+	for _, o in ipairs(created) do
+		if o:IsA("PostEffect") or o:IsA("Atmosphere") or o:IsA("Sky") then
+			pcall(function() o.Parent = Lighting end)
+		end
+	end
+	if Clouds then pcall(function() Clouds.Parent = Terrain end) end
+
 	ColorCorrection.Enabled = true
 	ColorCorrection.Brightness = Values.CCBrightness
 	ColorCorrection.Contrast = Values.CCContrast + Values.ShadowContrastBoost

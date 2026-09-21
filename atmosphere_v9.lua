@@ -72,10 +72,10 @@ end)
 -- НАСТРОЙКИ
 --==============================================================
 local S = {
-	clouds=true, cloudAnimate=true, cloudCover=0.6, cloudDensity=0.55, cloudColor=0.9, cloudSpeed=0.5,
-	rays=false, bloom=false, atmosphere=true,
+	clouds=false, cloudAnimate=true, cloudCover=0.6, cloudDensity=0.55, cloudColor=0.9, cloudSpeed=0.5,
+	rays=false, bloom=false, atmosphere=false,
 	bloomIntensity=0, raysIntensity=0, raysSpread=0,
-	dayNight=true, dayLength=240, timeOfDay=12,
+	dayNight=false, dayLength=240, timeOfDay=12,
 	sunSize=350, sunBright=2, sunRange=60,
 	moonSize=450, moonBright=1,
 	maxBrightness=2.5, atmDensity=0.32, atmHaze=1.4,
@@ -107,23 +107,24 @@ end
 -- SKY / ATMOSPHERE / EFFECTS
 --==============================================================
 local sky = Lighting:FindFirstChildOfClass("Sky") or Instance.new("Sky", Lighting)
-for _, v in ipairs(Lighting:GetChildren()) do
-	if v:IsA("Sky") then pcall(function() v.CelestialBodiesShown=false; v.SunAngularSize=0; v.MoonAngularSize=0 end) end
+if S.atmosphere then
+	for _, v in ipairs(Lighting:GetChildren()) do
+		if v:IsA("Sky") then pcall(function() v.CelestialBodiesShown=false; v.SunAngularSize=0; v.MoonAngularSize=0 end) end
+	end
 end
 
 local atm = Lighting:FindFirstChildOfClass("Atmosphere") or Instance.new("Atmosphere")
-atm.Density = S.atmDensity; atm.Offset = 0.25; atm.Glare = 0.3; atm.Parent = Lighting
+atm.Density = S.atmosphere and S.atmDensity or 0; atm.Offset = 0.25; atm.Glare = S.atmosphere and 0.3 or 0; atm.Parent = Lighting
 local rays = Lighting:FindFirstChildOfClass("SunRaysEffect") or Instance.new("SunRaysEffect")
-rays.Intensity = 0.2; rays.Spread = 1; rays.Parent = Lighting
+rays.Enabled = false; rays.Intensity = 0.2; rays.Spread = 1; rays.Parent = Lighting
 local bloom = Lighting:FindFirstChildOfClass("BloomEffect") or Instance.new("BloomEffect")
-bloom.Intensity = 1.2; bloom.Size = 24; bloom.Threshold = 1.05; bloom.Parent = Lighting
+bloom.Enabled = false; bloom.Intensity = 1.2; bloom.Size = 24; bloom.Threshold = 1.05; bloom.Parent = Lighting
 local ccFx = Lighting:FindFirstChild("__AtmosCC") or Instance.new("ColorCorrectionEffect")
-ccFx.Name = "__AtmosCC"; ccFx.Parent = Lighting
+ccFx.Name = "__AtmosCC"; ccFx.Enabled = false; ccFx.Parent = Lighting
 local ccPhase = Lighting:FindFirstChild("__AtmosPhaseCC") or Instance.new("ColorCorrectionEffect")
-ccPhase.Name = "__AtmosPhaseCC"; ccPhase.Parent = Lighting
+ccPhase.Name = "__AtmosPhaseCC"; ccPhase.Enabled = false; ccPhase.Parent = Lighting
 local blurFx = Lighting:FindFirstChild("__AtmosBlur") or Instance.new("BlurEffect")
-blurFx.Name = "__AtmosBlur"; blurFx.Size = 0; blurFx.Parent = Lighting
-Lighting.GlobalShadows = true
+blurFx.Name = "__AtmosBlur"; blurFx.Size = 0; blurFx.Enabled = false; blurFx.Parent = Lighting
 
 --==============================================================
 -- ОБЛАКА
@@ -394,9 +395,9 @@ end
 --==============================================================
 -- Камера-постэффекты для артефакта искажения (Blur + ColorCorrection в Lighting)
 local shockBlur = Lighting:FindFirstChild("__ShockBlur") or Instance.new("BlurEffect")
-shockBlur.Name = "__ShockBlur"; shockBlur.Size = 0; shockBlur.Parent = Lighting
+shockBlur.Name = "__ShockBlur"; shockBlur.Size = 0; shockBlur.Enabled = false; shockBlur.Parent = Lighting
 local shockCC = Lighting:FindFirstChild("__ShockCC") or Instance.new("ColorCorrectionEffect")
-shockCC.Name = "__ShockCC"; shockCC.Saturation = 0; shockCC.Contrast = 0; shockCC.TintColor = Color3.new(1,1,1)
+shockCC.Name = "__ShockCC"; shockCC.Enabled = false; shockCC.Saturation = 0; shockCC.Contrast = 0; shockCC.TintColor = Color3.new(1,1,1)
 shockCC.Parent = Lighting
 
 -- Список активных шокволн для трека (position, currentRadius, maxRadius, thickness)
@@ -784,12 +785,14 @@ RunService.RenderStepped:Connect(function(dt)
 	if S.dayNight then
 		Lighting.ClockTime = (Lighting.ClockTime + dt * (24 / math.max(1, S.dayLength))) % 24
 		S.timeOfDay = Lighting.ClockTime
-	else
-		Lighting.ClockTime = S.timeOfDay
 	end
 	local ct = Lighting.ClockTime
 	local dayFactor = clamp(math.sin((ct/24)*pi*2 - pi/2)*0.5 + 0.5, 0, 1)
-	applyPhase(phaseFromClock(ct))
+	if S.atmosphere or S.dayNight then
+		applyPhase(phaseFromClock(ct))
+	elseif ccPhase.Enabled then
+		ccPhase.Enabled = false
+	end
 
 	if clouds then
 		clouds.Enabled = S.clouds
@@ -831,16 +834,22 @@ RunService.RenderStepped:Connect(function(dt)
 
 	local coverNow = (S.clouds and clouds) and clouds.Cover or 0
 	local cloudBlock = 1 - coverNow*0.85
-	sunLight.Brightness  = S.sunBright  * sunVis  * cloudBlock
-	moonLight.Brightness = S.moonBright * moonVis * cloudBlock
-	sunLight.Range = S.sunRange; moonLight.Range = S.sunRange
-	sunLight.Enabled  = sunVis  > 0.02
-	moonLight.Enabled = moonVis > 0.02
+	sunLight.Enabled  = S.atmosphere and sunVis > 0.02
+	moonLight.Enabled = S.atmosphere and moonVis > 0.02
+	if S.atmosphere then
+		sunLight.Brightness  = S.sunBright  * sunVis  * cloudBlock
+		moonLight.Brightness = S.moonBright * moonVis * cloudBlock
+		sunLight.Range = S.sunRange; moonLight.Range = S.sunRange
+	end
 
-	Lighting.Brightness = 0.5 + dayFactor * S.maxBrightness
+	if S.atmosphere or S.dayNight then
+		Lighting.Brightness = 0.5 + dayFactor * S.maxBrightness
+	end
 	atm.Density = S.atmosphere and S.atmDensity or 0
-	atm.Haze    = S.atmHaze
-	atm.Glare   = 0.2 + dayFactor * 0.5
+	if S.atmosphere then
+		atm.Haze  = S.atmHaze
+		atm.Glare = 0.2 + dayFactor * 0.5
+	end
 	bloom.Enabled = S.bloom
 	bloom.Intensity = (S.bloomIntensity and S.bloomIntensity > 0) and S.bloomIntensity or (1.0 + dayFactor * 0.5)
 	ccFx.Enabled = S.sharpen
