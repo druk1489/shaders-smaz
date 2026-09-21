@@ -1,16 +1,29 @@
 # SMAZ Studio — Silent Engine UI
 
-Единый скрипт для executor'а (Solara и т.п.). **Один файл — всё внутри**:
-ядро Atmosphere (солнце/луна из Store, облака, день/ночь, погода, молнии,
-шоквейвы, фрикам Quenty-версия) + модули Tornado / Rain / Lightning /
-Reflections / Presets + Control Panel в стиле Silent Engine UI.
-Лоадер и отдельные скрипты убраны.
+Логика и гуишка разделены на отдельные файлы (каждый — независимый chunk,
+чтобы не упираться в лимит 200 локальных переменных). Запуск через лоадер.
 
-## Запуск
+## Запуск (лоадер)
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/druk1489/shaders-smaz/main/silent_engine.lua"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/druk1489/shaders-smaz/main/loader.lua"))()
 ```
+
+## Файлы
+| Файл | Что делает |
+|---|---|
+| `loader.lua` | тянет и запускает остальные файлы по очереди |
+| `atmosphere_v9.lua` | ядро атмосферы + API `SMAZ_ATMOS` |
+| `tornado_v10.lua` | торнадо `SMAZ_TORNADO` |
+| `rain_v11.lua` | дождь `SMAZ_RAIN` |
+| `lightning_v12.lua` | молнии `SMAZ_LIGHTNING` |
+| `reflections_v1.lua` | отражения `SMAZ_REFL` |
+| `presets_v1.lua` | пресеты `SMAZ_PRESETS` |
+| `control_panel.lua` | гуишка Silent Engine UI |
+
+Лоадер грузит логику в порядке списка, потом панель. Если файл не
+загрузился — выведет `[SMAZ LOADER] файл НЕ загрузился: ...` в консоль,
+остальные продолжают работать.
 
 ## Хоткеи
 - **Shift+P** — фрикам (WASD движение, E/Q вверх/вниз, удерживай ПКМ + мышь — обзор, колесо — зум, Shift — медленно, Ctrl — быстро)
