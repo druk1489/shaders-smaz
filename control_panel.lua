@@ -1184,7 +1184,46 @@ if ATMOS then
 		function(v) ATMOS.set("skyOn", v) end)
 	mkInputCard(pAtm, "ID скайбокса (все 6 граней)", function() return ATMOS.get("skyTex") or "" end,
 		function(v) ATMOS.set("skyTex", v) end)
-	mkInfoCard(pAtm, "Вставь rbxassetid://... — применится на все грани, оригинал карты вернётся при выкл. Кинешь файл с ID — добавлю пресеты.")
+	mkInfoCard(pAtm, "Свой ID вставь выше — применится на все грани, оригинал карты вернётся при выкл.")
+	-- пресеты скайбоксов из assets.txt репы (id=название), фолбэк — вшитый список
+	do
+		local skyPresetURL = "https://raw.githubusercontent.com/druk1489/shaders-smaz/main/assets.txt"
+		local skyFallback = {
+			{"2846635652", "grass"},
+			{"2886131957", "winter grass"},
+			{"7108851308", "aesthetic sky"},
+			{"911025794", "realistic night sky"},
+			{"83244547123697", "day sky"},
+			{"10256505900", "alt day sky"},
+			{"591067775", "sunless blue skybox"},
+			{"15502592084", "mega realstic sunset"},
+			{"8202961731", "pink sky"},
+			{"136055162054954", "scary red skybox"},
+			{"4696746436", "black sky"},
+			{"72835926026092", "anime style day sky"},
+			{"12376964583", "rain sky"},
+			{"324015877", "skybox with mountains"},
+			{"14589496741", "city sky"},
+		}
+		local function skyUse(id)
+			if not ATMOS then return end
+			ATMOS.set("skyTex", "rbxassetid://" .. tostring(id))
+			ATMOS.set("skyOn", true)
+		end
+		local skyPresets = {}
+		pcall(function()
+			local body = game:HttpGet(skyPresetURL, true)
+			for line in tostring(body):gmatch("[^\r\n]+") do
+				local id, name = line:match("^%s*(%d+)%s*=%s*(.+)%s*$")
+				if id and name then skyPresets[#skyPresets + 1] = {id, name} end
+			end
+		end)
+		if #skyPresets == 0 then skyPresets = skyFallback end
+		for _, pr in ipairs(skyPresets) do
+			local id, name = pr[1], pr[2]
+			mkButtonCard(pAtm, name, function() skyUse(id) end)
+		end
+	end
 
 	mkSection(pAtm, "РЕЗКОСТЬ / ЦИКЛ")
 	mkToggleCard(pAtm, "Резкость (CC)", "", function() return ATMOS.get("sharpen") == true end,
