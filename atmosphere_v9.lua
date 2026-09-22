@@ -75,11 +75,12 @@ local S = {
 	clouds=false, cloudAnimate=true, cloudCover=0.6, cloudDensity=0.55, cloudColor=0.9, cloudSpeed=0.5,
 	rays=false, bloom=false, atmosphere=false,
 	bloomIntensity=0, raysIntensity=0, raysSpread=0,
-	dayNight=false, dayLength=240, timeOfDay=12,
+	dayNight=false, dayLength=240, timeOfDay=12, timeFollow=false,
 	sunSize=350, sunBright=2, sunRange=60,
 	moonSize=450, moonBright=1,
 	sunTexOn=true, sunTex="rbxasset://sky/sun.jpg",
 	moonTexOn=true, moonTex="rbxasset://sky/moon.jpg", texSize=512,
+	skyOn=false, skyTex="",
 	shine=false, shineStrength=0.35, waterMirror=false,
 	maxBrightness=2.5, atmDensity=0.32, atmHaze=1.4,
 	sharpen=false, sharpenAmt=0.2, blur=false, blurAmt=12, blurMode="global", blurMaxDist=250,
@@ -327,6 +328,35 @@ local function shineOff()
 		shineEnv = nil
 	end
 	shineWaterApply() -- S.shine уже false -> воду вернёт из бэкапа
+end
+
+--==============================================================
+-- СКАЙБОКС: свой ID на все 6 граней. Оригинал карты — в бэкап,
+-- при выкл возвращается. Ждёт твои ID (поле в АТМОСФЕРА → Светила).
+--==============================================================
+local SKY_FACES = {"SkyboxBk", "SkyboxDn", "SkyboxFt", "SkyboxLf", "SkyboxRt", "SkyboxUp"}
+local skyBackup = nil
+local function skyApply()
+	local sk = Lighting:FindFirstChildOfClass("Sky")
+	if not sk then return end
+	if S.skyOn and S.skyTex ~= "" then
+		if skyBackup == nil then
+			skyBackup = {}
+			for _, f in ipairs(SKY_FACES) do
+				pcall(function() skyBackup[f] = sk[f] end)
+			end
+		end
+		for _, f in ipairs(SKY_FACES) do
+			pcall(function() sk[f] = S.skyTex end)
+		end
+	else
+		if skyBackup then
+			for _, f in ipairs(SKY_FACES) do
+				pcall(function() if skyBackup[f] ~= nil then sk[f] = skyBackup[f] end end)
+			end
+			skyBackup = nil
+		end
+	end
 end
 
 --==============================================================
@@ -880,13 +910,36 @@ local function applyPhase(name)
 end
 
 local t = 0
+local clkAcc, clkLast, clkFight, clkMsg = nil, nil, 0, false -- состояние войны за время (локали, не в S!)
 RunService.RenderStepped:Connect(function(dt)
 	t += dt
 	local camPos = Camera.CFrame.Position
 
-	if S.dayNight then
-		Lighting.ClockTime = (Lighting.ClockTime + dt * (24 / math.max(1, S.dayLength))) % 24
-		S.timeOfDay = Lighting.ClockTime
+	if S.dayNight and not S.timeFollow then
+		-- свой аккумулятор вместо read-modify-write: иначе с игрой,
+		-- которая тоже пишет время, получается дёрганье солнца
+		clkAcc = (clkAcc or Lighting.ClockTime) + dt * (24 / math.max(1, S.dayLength))
+		if clkAcc >= 24 then clkAcc = clkAcc - 24 end
+		local cur = Lighting.ClockTime
+		if clkLast ~= nil and math.abs(cur - clkLast) > 0.05 then
+			-- время ушло не туда, куда мы ставили = параллельно пишет игра
+			clkFight = clkFight + 1
+			clkAcc = cur -- подстраиваемся, чтобы при уступке не было прыжка
+			if clkFight >= 30 and not clkMsg then
+				S.timeFollow = true -- игра держит время каждый кадр: уступаем
+				clkMsg = true
+				pcall(function()
+					StarterGui:SetCore("SendNotification", {Title="SMAZ время", Text="Игра держит своё время — уступил. Выкл/вкл день, чтобы вернуть.", Duration=6})
+				end)
+			end
+		else
+			clkFight = 0
+		end
+		if not S.timeFollow then
+			Lighting.ClockTime = clkAcc
+			clkLast = clkAcc
+			S.timeOfDay = clkAcc
+		end
 	end
 	local ct = Lighting.ClockTime
 	local dayFactor = clamp(math.sin((ct/24)*pi*2 - pi/2)*0.5 + 0.5, 0, 1)
@@ -1207,6 +1260,13 @@ genv().SMAZ_ATMOS = {
 	get = function(k) return S[k] end,
 	set = function(k, v)
 		if k == "freeCam" then setFreecam(not not v) return S.freeCam end
+		if k == "dayNight" then
+			S.dayNight = not not v
+			if S.dayNight then S.timeFollow = false; clkAcc = nil; clkLast = nil; clkFight = 0; clkMsg = false end
+			return S.dayNight
+		end
+		if k == "skyOn" then S.skyOn = not not v; skyApply() return S.skyOn end
+		if k == "skyTex" then S.skyTex = tostring(v or ""); skyApply() return S.skyTex end
 		if k == "shine" then S.shine = not not v; if S.shine then shineOn() else shineOff() end return S.shine end
 		if k == "waterMirror" then S.waterMirror = not not v; shineWaterApply() return S.waterMirror end
 		if k == "shineStrength" then

@@ -1179,6 +1179,13 @@ if ATMOS then
 	mkSliderCard(pAtm, "Размер текстуры", function() return ATMOS.get("texSize") or 512 end,
 		function(v) ATMOS.set("texSize", v) end, 128, 1024, "%.0f")
 
+	mkSection(pAtm, "СКАЙБОКС")
+	mkToggleCard(pAtm, "Свой скайбокс", "", function() return ATMOS.get("skyOn") == true end,
+		function(v) ATMOS.set("skyOn", v) end)
+	mkInputCard(pAtm, "ID скайбокса (все 6 граней)", function() return ATMOS.get("skyTex") or "" end,
+		function(v) ATMOS.set("skyTex", v) end)
+	mkInfoCard(pAtm, "Вставь rbxassetid://... — применится на все грани, оригинал карты вернётся при выкл. Кинешь файл с ID — добавлю пресеты.")
+
 	mkSection(pAtm, "РЕЗКОСТЬ / ЦИКЛ")
 	mkToggleCard(pAtm, "Резкость (CC)", "", function() return ATMOS.get("sharpen") == true end,
 		function(v) ATMOS.set("sharpen", v) end)
@@ -1558,15 +1565,47 @@ RunService.RenderStepped:Connect(function()
 		if dofFx and dofFx.Enabled and cam then
 			local prm = RaycastParams.new()
 			prm.FilterType = Enum.RaycastFilterType.Exclude
-			prm.FilterDescendantsInstances = { cam }
+			-- ФИКС: свой персонаж в игноре, иначе фокус прилипает к затылку при ходьбе
+			local excl = { cam }
+			pcall(function()
+				local lp = game:GetService("Players").LocalPlayer
+				local ch = lp and lp.Character or nil
+				if ch then excl[#excl + 1] = ch end
+			end)
+			prm.FilterDescendantsInstances = excl
+			prm.IgnoreWater = true
 			local hit = workspace:Raycast(cam.CFrame.Position, cam.CFrame.LookVector * 600, prm)
-			pcall(function() dofFx.FocusDistance = hit and hit.Distance or 600 end)
+			local d = hit and hit.Distance or 600
+			if d < 12 then d = 600 end -- всё равно задел своё -> небо
+			pcall(function()
+				local cur = dofFx.FocusDistance
+				if typeof(cur) ~= "number" then cur = d end
+				dofFx.FocusDistance = cur + (d - cur) * 0.2 -- сглаживание, без рывков
+			end)
 		end
 	end
 	if camBreath.on then
 		local cam = workspace.CurrentCamera
 		if cam then
-			pcall(function() cam.FieldOfView = camFov.manual + camBreath.amp * math.sin(tick() * camBreath.speed) end)
+			local target = camFov.manual + camBreath.amp * math.sin(tick() * camBreath.speed)
+			local cur = cam.FieldOfView
+			-- детект войны за FOV: игра вернула своё мимо нашего значения
+			if camBreath._last ~= nil and camBreath.amp > 0 and math.abs(cur - camBreath._last) > 1.5 then
+				camBreath._fight = (camBreath._fight or 0) + 1
+				if camBreath._fight >= 30 then
+					camBreath.on = false -- игра держит FOV каждый кадр: выключаемся, вакханалии не будет
+					camBreath._fight = 0
+					pcall(function()
+						game:GetService("StarterGui"):SetCore("SendNotification", {Title="SMAZ FOV", Text="Игра держит свой FOV — дыхание выкл.", Duration=5})
+					end)
+				end
+			else
+				camBreath._fight = 0
+			end
+			if camBreath.on then
+				pcall(function() cam.FieldOfView = target end)
+				camBreath._last = target
+			end
 		end
 	end
 end)
