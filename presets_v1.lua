@@ -407,6 +407,18 @@ local function apply()
 	SunRays.Intensity = Values.SunIntensity
 	SunRays.Spread = Values.SunSpread
 
+	-- синк с ядром атмосферы: его RenderStepped-сторож гасит "чужие"
+	-- SunRays/Bloom пока флаги выкл — без синка он душил бы лучи пресетов,
+	-- а выкл пресетов не гасил бы ничего
+	pcall(function()
+		local g = (getgenv and getgenv()) or _G
+		local A = g and g.SMAZ_ATMOS or nil
+		if A then
+			A.set("rays", Values.SunRaysEnabled)
+			A.set("bloom", Values.BloomEnabled)
+		end
+	end)
+
 	Blur.Enabled = Values.BlurEnabled
 	Blur.Size = Values.BlurSize
 

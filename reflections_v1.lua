@@ -1,6 +1,11 @@
 -- Reflections v1 - real planar reflections via world clones
 -- Clones nearby BaseParts and character bones, mirrors CFrame under a horizontal plane
 -- Correct rotation math: flips pitch and roll, keeps yaw (planar mirror across Y).
+--
+-- ЧЕСТНОЕ ОГРАНИЧЕНИЕ: клоны под НЕпрозрачным полом скрыты глубиной
+-- (движок рисует пол поверх), поэтому видно их только на стекле/воде.
+-- На обычных полах включай "Shine" в атмосфере (PBR-блики + Reflectance
+-- + зеркальная вода) — он виден везде и почти бесплатен.
 
 if getgenv and getgenv().__REFL_V1_LOADED then
 	if getgenv().__REFL_V1_UNLOAD then pcall(getgenv().__REFL_V1_UNLOAD) end
@@ -75,7 +80,10 @@ local function makeClone(orig)
 		orig.Archivable = true
 		local c = orig:Clone()
 		orig.Archivable = wasArc
-		for _, ch in ipairs(c:GetChildren()) do ch:Destroy() end
+		-- декали/текстуры оставляем (иначе отражения без картинок), остальное чистим
+		for _, ch in ipairs(c:GetChildren()) do
+			if not ch:IsA("Decal") and not ch:IsA("Texture") then ch:Destroy() end
+		end
 		c.Anchored = true; c.CanCollide = false; c.CanQuery = false; c.CanTouch = false
 		c.CastShadow = false; c.Massless = true
 		c.Transparency = CFG.baseTransparency
@@ -158,7 +166,9 @@ local function ensureCharProxies()
 		if orig and orig:IsA("BasePart") then
 			local ok, c = pcall(function() return orig:Clone() end)
 			if ok and c then
-				for _, chi in ipairs(c:GetChildren()) do chi:Destroy() end
+				for _, chi in ipairs(c:GetChildren()) do
+					if not chi:IsA("Decal") and not chi:IsA("Texture") then chi:Destroy() end
+				end
 				c.Anchored = true; c.CanCollide = false; c.CanQuery = false; c.CanTouch = false
 				c.CastShadow = false; c.Massless = true
 				c.Transparency = CFG.baseTransparency

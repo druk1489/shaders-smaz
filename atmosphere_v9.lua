@@ -78,6 +78,9 @@ local S = {
 	dayNight=false, dayLength=240, timeOfDay=12,
 	sunSize=350, sunBright=2, sunRange=60,
 	moonSize=450, moonBright=1,
+	sunTexOn=true, sunTex="rbxasset://sky/sun.jpg",
+	moonTexOn=true, moonTex="rbxasset://sky/moon.jpg", texSize=512,
+	shine=false, shineStrength=0.35, waterMirror=false,
 	maxBrightness=2.5, atmDensity=0.32, atmHaze=1.4,
 	sharpen=false, sharpenAmt=0.2, blur=false, blurAmt=12, blurMode="global", blurMaxDist=250,
 	weather="none", weatherIntensity=0.6,
@@ -202,6 +205,17 @@ local function makeCelestial(name, color, assetId, fallbackSize)
 	local light = Instance.new("PointLight")
 	light.Range=60; light.Brightness=2; light.Color=color; light.Parent=root
 
+	-- слой 2: спрайт-текстура. BillboardGui всегда смотрит в камеру и
+	-- работает без game:GetObjects (который в половине игр/экзекьюторов падает).
+	-- Создаём всегда (дешево), вкл/выкл и картинку решает главный цикл.
+	local bb = Instance.new("BillboardGui")
+	bb.Name = name.."_Sprite"; bb.Size = UDim2.fromOffset(512, 512); bb.AlwaysOnTop = false
+	pcall(function() bb.LightInfluence = 0 end)
+	bb.Enabled = false; bb.Parent = root
+	local img = Instance.new("ImageLabel")
+	img.Name = "TexImg"; img.BackgroundTransparency = 1
+	img.Size = UDim2.fromScale(1, 1); img.Image = ""; img.Parent = bb
+
 	local visual
 	local model = tryLoadAssetModel(assetId)
 	if model then
@@ -221,11 +235,99 @@ local function makeCelestial(name, color, assetId, fallbackSize)
 		visual = ball
 	end
 
-	return root, light, visual
+	return root, light, visual, bb, img
 end
 
-local sunPart,  sunLight,  sunVisual  = makeCelestial("Sun",  Color3.fromRGB(255,240,200), SUN_ASSET,  350)
-local moonPart, moonLight, moonVisual = makeCelestial("Moon", Color3.fromRGB(200,215,255), MOON_ASSET, 350)
+local sunPart,  sunLight,  sunVisual,  sunBb,  sunImg  = makeCelestial("Sun",  Color3.fromRGB(255,240,200), SUN_ASSET,  350)
+local moonPart, moonLight, moonVisual, moonBb, moonImg = makeCelestial("Moon", Color3.fromRGB(200,215,255), MOON_ASSET, 350)
+local lastSunTex, lastMoonTex = "", "" -- кеш: Image трогаем только при смене
+
+--==============================================================
+-- ОТРАЖЕНИЯ-ЛАЙТ (PBR shine): дешёвая и ВИДИМАЯ везде альтернатива
+-- планарным клонам (reflections_v1: клоны под НЕпрозрачным полом
+-- скрыты глубиной — работают только на стекле/воде).
+-- Здесь: Future + env-карты (PBR-блики) + Reflectance скайбокса
+-- на партах + зеркальная вода. Всё обратимо через бэкапы.
+--==============================================================
+local shineBackup = {} -- [BasePart] = старый Reflectance
+local shineConn = nil
+local shineEnv = nil
+local shineWater = nil
+local function shineApplyPart(part)
+	if not part:IsA("BasePart") then return end
+	if part:IsDescendantOf(fx) then return end -- своё (светила/погода) не трогаем
+	if shineBackup[part] ~= nil then
+		pcall(function() part.Reflectance = S.shineStrength end)
+		return
+	end
+	shineBackup[part] = part.Reflectance
+	pcall(function() part.Reflectance = S.shineStrength end)
+end
+local function shineSweep()
+	pcall(function()
+		for _, d in ipairs(Workspace:GetDescendants()) do
+			if d:IsA("BasePart") then shineApplyPart(d) end
+		end
+	end)
+end
+local function shineWaterApply()
+	if S.shine and S.waterMirror and Terrain then
+		if shineWater == nil then
+			shineWater = {}
+			pcall(function()
+				shineWater.refl = Terrain.WaterReflectance
+				shineWater.trans = Terrain.WaterTransparency
+				shineWater.wave = Terrain.WaterWaveSize
+			end)
+		end
+		pcall(function()
+			Terrain.WaterReflectance = 1
+			Terrain.WaterTransparency = 0.15
+			Terrain.WaterWaveSize = 0.1 -- гладь = чётче отражение
+		end)
+	else
+		if shineWater and Terrain then
+			pcall(function()
+				if shineWater.refl ~= nil then Terrain.WaterReflectance = shineWater.refl end
+				if shineWater.trans ~= nil then Terrain.WaterTransparency = shineWater.trans end
+				if shineWater.wave ~= nil then Terrain.WaterWaveSize = shineWater.wave end
+			end)
+			shineWater = nil
+		end
+	end
+end
+local function shineOn()
+	if shineEnv == nil then
+		shineEnv = {}
+		pcall(function() shineEnv.diffuse = Lighting.EnvironmentDiffuseScale end)
+		pcall(function() shineEnv.spec = Lighting.EnvironmentSpecularScale end)
+	end
+	pcall(function() Lighting.EnvironmentDiffuseScale = 1 end)
+	pcall(function() Lighting.EnvironmentSpecularScale = 1 end)
+	pcall(function() Lighting.Technology = Enum.Technology.Future end) -- на части карт ошибка, ок
+	shineWaterApply()
+	shineSweep()
+	if not shineConn then
+		shineConn = Workspace.DescendantAdded:Connect(function(d)
+			if S.shine then task.defer(function() shineApplyPart(d) end) end
+		end)
+	end
+end
+local function shineOff()
+	if shineConn then pcall(function() shineConn:Disconnect() end) shineConn = nil end
+	for part, r in pairs(shineBackup) do
+		pcall(function() if part and part.Parent then part.Reflectance = r end end)
+	end
+	shineBackup = {}
+	if shineEnv then
+		pcall(function()
+			if shineEnv.diffuse then Lighting.EnvironmentDiffuseScale = shineEnv.diffuse end
+			if shineEnv.spec then Lighting.EnvironmentSpecularScale = shineEnv.spec end
+		end)
+		shineEnv = nil
+	end
+	shineWaterApply() -- S.shine уже false -> воду вернёт из бэкапа
+end
 
 --==============================================================
 -- ПОГОДА
@@ -832,6 +934,30 @@ RunService.RenderStepped:Connect(function(dt)
 	setVisualTransparency(sunVisual,  1 - sunVis)
 	setVisualTransparency(moonVisual, 1 - moonVis)
 
+	-- слой 2: спрайты. Один виден за раз: спрайт вкл -> прячем visual (модель/шар),
+	-- иначе спрайт выкл и visual как раньше. Поэтому текстуры есть ВСЕГДА,
+	-- даже когда game:GetObjects падает.
+	if S.sunTexOn and S.sunTex ~= "" then
+		if lastSunTex ~= S.sunTex then sunImg.Image = S.sunTex; lastSunTex = S.sunTex end
+		setVisualTransparency(sunVisual, 1)
+		sunBb.Enabled = true
+		sunBb.Size = UDim2.fromOffset(S.texSize, S.texSize)
+		sunImg.ImageTransparency = 1 - sunVis
+	else
+		sunBb.Enabled = false
+		if lastSunTex ~= "" then lastSunTex = "" end
+	end
+	if S.moonTexOn and S.moonTex ~= "" then
+		if lastMoonTex ~= S.moonTex then moonImg.Image = S.moonTex; lastMoonTex = S.moonTex end
+		setVisualTransparency(moonVisual, 1)
+		moonBb.Enabled = true
+		moonBb.Size = UDim2.fromOffset(S.texSize, S.texSize)
+		moonImg.ImageTransparency = 1 - moonVis
+	else
+		moonBb.Enabled = false
+		if lastMoonTex ~= "" then lastMoonTex = "" end
+	end
+
 	local coverNow = (S.clouds and clouds) and clouds.Cover or 0
 	local cloudBlock = 1 - coverNow*0.85
 	sunLight.Enabled  = S.atmosphere and sunVis > 0.02
@@ -852,6 +978,12 @@ RunService.RenderStepped:Connect(function(dt)
 	end
 	bloom.Enabled = S.bloom
 	bloom.Intensity = (S.bloomIntensity and S.bloomIntensity > 0) and S.bloomIntensity or (1.0 + dayFactor * 0.5)
+	if not S.bloom then
+		-- чужие Bloom (карта/пресеты/панель) тоже гасим, иначе "не вырубается"
+		for _, e in ipairs(Lighting:GetChildren()) do
+			if e:IsA("BloomEffect") and e ~= bloom then pcall(function() e.Enabled = false end) end
+		end
+	end
 	ccFx.Enabled = S.sharpen
 	ccFx.Contrast   = S.sharpenAmt
 	ccFx.Saturation = S.sharpenAmt * 0.5
@@ -861,9 +993,17 @@ RunService.RenderStepped:Connect(function(dt)
 			local cam = Camera
 			local prm = RaycastParams.new()
 			prm.FilterType = Enum.RaycastFilterType.Exclude
-			prm.FilterDescendantsInstances = { cam }
+			-- ФИКС: свой персонаж в игноре, иначе луч бьёт в затылок/торс
+			-- при ходьбе и фокус/блюр скачет
+			local excl = { cam }
+			local lp = Players.LocalPlayer
+			local ch = lp and lp.Character or nil
+			if ch then excl[#excl + 1] = ch end
+			prm.FilterDescendantsInstances = excl
+			prm.IgnoreWater = true
 			local hit = workspace:Raycast(cam.CFrame.Position, cam.CFrame.LookVector * S.blurMaxDist, prm)
 			local d = hit and hit.Distance or S.blurMaxDist
+			if d < 12 then d = S.blurMaxDist end -- всё равно задел своё -> считаем как небо
 			bsize = S.blurAmt * math.clamp(d / math.max(1, S.blurMaxDist), 0, 1)
 		end
 		blurFx.Enabled = true
@@ -874,6 +1014,13 @@ RunService.RenderStepped:Connect(function(dt)
 	rays.Enabled   = S.rays
 	rays.Intensity = (S.raysIntensity and S.raysIntensity > 0) and S.raysIntensity or (0.05 + dayFactor*0.22 + math.sin(t*1.5)*0.02)
 	rays.Spread    = (S.raysSpread and S.raysSpread > 0) and S.raysSpread or (0.8 + dayFactor*0.4)
+	if not S.rays then
+		-- чужие SunRays (карта/пресеты/__PanelSunRays) + скрипты, что их включают:
+		-- душим каждый кадр, иначе "лучи не вырубаются"
+		for _, e in ipairs(Lighting:GetChildren()) do
+			if e:IsA("SunRaysEffect") and e ~= rays then pcall(function() e.Enabled = false end) end
+		end
+	end
 
 	weatherPart.Position = camPos + Vector3.new(0, 60, 0)
 	if emitter.Enabled and S.weather ~= "none" then
@@ -1060,6 +1207,17 @@ genv().SMAZ_ATMOS = {
 	get = function(k) return S[k] end,
 	set = function(k, v)
 		if k == "freeCam" then setFreecam(not not v) return S.freeCam end
+		if k == "shine" then S.shine = not not v; if S.shine then shineOn() else shineOff() end return S.shine end
+		if k == "waterMirror" then S.waterMirror = not not v; shineWaterApply() return S.waterMirror end
+		if k == "shineStrength" then
+			S.shineStrength = math.clamp(tonumber(v) or 0.35, 0, 1)
+			if S.shine then
+				for part, _ in pairs(shineBackup) do
+					pcall(function() if part and part.Parent then part.Reflectance = S.shineStrength end end)
+				end
+			end
+			return S.shineStrength
+		end
 		if S[k] ~= nil then S[k] = v end
 		return S[k]
 	end,

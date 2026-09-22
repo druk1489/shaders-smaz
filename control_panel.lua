@@ -771,11 +771,57 @@ end
 local function setTech(v)
 	pcall(function() Lighting.Technology = Enum.Technology[v] end)
 end
+local function mkInputCard(page, label, get, set)
+	local row = Instance.new("Frame")
+	row.Name = "InputCard"
+	row.Size = UDim2.new(1, 0, 0, 54)
+	row.BackgroundColor3 = Color3.fromRGB(34, 38, 52)
+	row.BorderSizePixel = 0
+	row.Parent = page
+	pcall(function()
+		local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = row
+	end)
+	local lbl = Instance.new("TextLabel")
+	lbl.BackgroundTransparency = 1
+	lbl.Position = UDim2.new(0, 10, 0, 4); lbl.Size = UDim2.new(1, -20, 0, 18)
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.Font = Enum.Font.Gotham; lbl.TextSize = 13
+	lbl.TextColor3 = Color3.fromRGB(220, 220, 230)
+	lbl.Text = label
+	lbl.Parent = row
+	local box = Instance.new("TextBox")
+	box.Position = UDim2.new(0, 10, 0, 26); box.Size = UDim2.new(1, -20, 0, 20)
+	box.BackgroundColor3 = Color3.fromRGB(22, 25, 36)
+	box.TextColor3 = Color3.fromRGB(235, 235, 245)
+	box.PlaceholderColor3 = Color3.fromRGB(120, 125, 145)
+	box.PlaceholderText = "вставь id..."
+	box.Font = Enum.Font.Gotham; box.TextSize = 12
+	box.TextXAlignment = Enum.TextXAlignment.Left
+	box.ClearTextOnFocus = false
+	pcall(function()
+		local c2 = Instance.new("UICorner"); c2.CornerRadius = UDim.new(0, 4); c2.Parent = box
+	end)
+	local ok, cur = pcall(get)
+	box.Text = (ok and cur ~= nil) and tostring(cur) or ""
+	box.Parent = row
+	box.FocusLost:Connect(function()
+		pcall(set, box.Text)
+	end)
+	return row
+end
+
 local function getOrCreate(name, className)
 	local e = Lighting:FindFirstChild(name)
 	if e and e:IsA(className) then return e end
 	if e then pcall(function() e:Destroy() end) end
-	return Instance.new(className, Lighting)
+	-- ФИКС: раньше Name не ставился и эффект создавался ВКЛЮЧЁННЫМ —
+	-- каждый запуск панели плодил безымянные дубликаты SunRays/Bloom/Blur/CC/DoF,
+	-- которые уже нельзя было выключить ("лучи не вырубаются")
+	local n = Instance.new(className)
+	n.Name = name
+	n.Enabled = false
+	n.Parent = Lighting
+	return n
 end
 
 --==========================================================
@@ -956,9 +1002,18 @@ if not ATMOS then
 			if not cam then return end
 			local prm = RaycastParams.new()
 			prm.FilterType = Enum.RaycastFilterType.Exclude
-			prm.FilterDescendantsInstances = { cam }
+			-- ФИКС: свой персонаж в игноре, иначе превью блюра скачет при ходьбе
+			local excl = { cam }
+			pcall(function()
+				local lp = game:GetService("Players").LocalPlayer
+				local ch = lp and lp.Character or nil
+				if ch then excl[#excl + 1] = ch end
+			end)
+			prm.FilterDescendantsInstances = excl
+			prm.IgnoreWater = true
 			local hit = workspace:Raycast(cam.CFrame.Position, cam.CFrame.LookVector * sBlur.maxDist, prm)
 			local d = hit and hit.Distance or sBlur.maxDist
+			if d < 12 then d = sBlur.maxDist end
 			pcall(function() fx.Size = math.clamp(d / math.max(1, sBlur.maxDist), 0, 1) * sBlur.size end)
 		end)
 	end)
@@ -995,7 +1050,8 @@ mkToggleCard(pFX, "SunRays", "", function()
 	if ATMOS then return ATMOS.get("rays") ~= false end
 	return sunFx.Enabled
 end, function(v)
-	if ATMOS then ATMOS.set("rays", v) else pcall(function() sunFx.Enabled = v end) end
+	if ATMOS then ATMOS.set("rays", v) end
+	pcall(function() sunFx.Enabled = v end) -- свой дубликат панели гасим всегда, иначе лучи висят
 end)
 mkSliderCard(pFX, "Интенсивность лучей", function()
 	if ATMOS then
@@ -1112,6 +1168,16 @@ if ATMOS then
 		function(v) ATMOS.set("moonBright", v) end, 0, 6, "%.2f")
 	mkSliderCard(pAtm, "Диапазон солнца", function() return ATMOS.get("sunRange") or 60 end,
 		function(v) ATMOS.set("sunRange", v) end, 10, 200, "%.0f")
+	mkToggleCard(pAtm, "Текстура солнца", "", function() return ATMOS.get("sunTexOn") ~= false end,
+		function(v) ATMOS.set("sunTexOn", v) end)
+	mkInputCard(pAtm, "ID текстуры солнца", function() return ATMOS.get("sunTex") or "" end,
+		function(v) ATMOS.set("sunTex", v) end)
+	mkToggleCard(pAtm, "Текстура луны", "", function() return ATMOS.get("moonTexOn") ~= false end,
+		function(v) ATMOS.set("moonTexOn", v) end)
+	mkInputCard(pAtm, "ID текстуры луны", function() return ATMOS.get("moonTex") or "" end,
+		function(v) ATMOS.set("moonTex", v) end)
+	mkSliderCard(pAtm, "Размер текстуры", function() return ATMOS.get("texSize") or 512 end,
+		function(v) ATMOS.set("texSize", v) end, 128, 1024, "%.0f")
 
 	mkSection(pAtm, "РЕЗКОСТЬ / ЦИКЛ")
 	mkToggleCard(pAtm, "Резкость (CC)", "", function() return ATMOS.get("sharpen") == true end,
@@ -1221,6 +1287,14 @@ if RF then
 		local ok, v = pcall(RF.getBaseTransparency)
 		return ok and v and math.floor(v * 100) or 0
 	end, function(v) pcall(RF.setBaseTransparency, v / 100) end, 0, 90, "%.0f")
+	mkSection(pMod, "ОТРАЖЕНИЯ-ЛАЙТ (PBR, видно везде)")
+	mkToggleCard(pMod, "Shine (блики/металл)", "", function() return ATMOS and ATMOS.get("shine") == true or false end,
+		function(v) if ATMOS then ATMOS.set("shine", v) end end)
+	mkSliderCard(pMod, "Сила shine", function() return ATMOS and ATMOS.get("shineStrength") or 0.35 end,
+		function(v) if ATMOS then ATMOS.set("shineStrength", v) end end, 0, 1, "%.2f")
+	mkToggleCard(pMod, "Зеркальная вода", "", function() return ATMOS and ATMOS.get("waterMirror") == true or false end,
+		function(v) if ATMOS then ATMOS.set("waterMirror", v) end end)
+	mkInfoCard(pMod, "Планарные клоны выше видно только на стекле/воде (под обычным полом их скрывает глубина). Shine виден везде и почти ничего не стоит.")
 else
 	mkInfoCard(pMod, "Отражения недоступны (нет модуля).")
 end
